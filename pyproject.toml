@@ -1,0 +1,15 @@
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+# force-exclude also applies to files explicitly passed by an editor or command.
+force-exclude = '''
+(?x)(
+    (^|/)app/persona\.py$
+  | (^|/)\.env([^/]*$|/)
+  | (^|/)(
+        \.git|\.venv|venv|\.cache|\.pytest_cache|\.ruff_cache|\.vscode|\.idea
+      | __pycache__|\.cloud-staging|runtime|logs|secrets|private|credentials
+      | data|conversations|dist|build
+    )(/|$)
+)
+'''

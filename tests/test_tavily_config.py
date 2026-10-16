@@ -23,7 +23,7 @@ class TavilyConfigTests(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
         self.original = (
-            '# preserve unrelated services and formatting\n'
+            "# preserve unrelated services and formatting\n"
             'LLM_API_KEY="test-model-key"\n'
             'VISION_PROVIDER="compatible"\n'
             'VISION_BASE_URL="https://vision.example/v1"\n'
@@ -36,13 +36,23 @@ class TavilyConfigTests(unittest.TestCase):
 
     def run_wizard(self, entered):
         output = io.StringIO()
-        with patch("configure.ROOT", self.root), patch("configure.getpass", return_value=entered) as prompt, \
-                patch("builtins.input", side_effect=AssertionError("Unexpected visible prompt")), \
-                contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+        with (
+            patch("configure.ROOT", self.root),
+            patch("configure.getpass", return_value=entered) as prompt,
+            patch("builtins.input", side_effect=AssertionError("Unexpected visible prompt")),
+            contextlib.redirect_stdout(output),
+            contextlib.redirect_stderr(output),
+        ):
             result = configure_tavily()
         self.assertIn("输入不显示字符", prompt.call_args.args[0])
         visible = output.getvalue() + prompt.call_args.args[0]
-        for value in ("test-old-key", "test-tavily-key", "test-model-key", "test-pexels-key", "test-vision-key"):
+        for value in (
+            "test-old-key",
+            "test-tavily-key",
+            "test-model-key",
+            "test-pexels-key",
+            "test-vision-key",
+        ):
             self.assertNotIn(value, visible)
         return result, visible
 
@@ -68,7 +78,12 @@ class TavilyConfigTests(unittest.TestCase):
         self.path.write_text("TAVILY_API_KEY=test-tavily-key\n", encoding="utf-8")
         self.assertIn("test-tavily-key", local_private_values(self.root))
         fake_key = "tvly-" + "x" * 24
-        self.assertTrue(any(item.rule == "API 凭证格式" for item in inspect_text("example.py", "value=" + fake_key)))
+        self.assertTrue(
+            any(
+                item.rule == "API 凭证格式"
+                for item in inspect_text("example.py", "value=" + fake_key)
+            )
+        )
 
     def test_updates_only_key_preserving_vision_and_other_content_and_line_endings(self):
         for newline in ("\n", "\r\n"):
@@ -78,7 +93,9 @@ class TavilyConfigTests(unittest.TestCase):
                 result, visible = self.run_wizard(" test-tavily-key ")
                 self.assertEqual(result, 0)
                 self.assertIn("https://app.tavily.com/", visible)
-                expected = original.replace('TAVILY_API_KEY="test-old-key"', "TAVILY_API_KEY='test-tavily-key'")
+                expected = original.replace(
+                    'TAVILY_API_KEY="test-old-key"', "TAVILY_API_KEY='test-tavily-key'"
+                )
                 self.assertEqual(self.path.read_bytes(), expected.encode("utf-8"))
                 self.assertEqual(sorted(p.name for p in self.root.iterdir()), [".env"])
 
@@ -132,9 +149,11 @@ class TavilyConfigTests(unittest.TestCase):
         self.assertEqual(sorted(p.name for p in self.root.iterdir()), [".env"])
 
     def test_cli_routes_only_to_independent_tavily_wizard(self):
-        with patch("configure.configure_tavily", return_value=7) as wizard, \
-                patch("configure.configure", side_effect=AssertionError("Full wizard called")), \
-                patch("configure.configure_pexels", side_effect=AssertionError("Pexels wizard called")):
+        with (
+            patch("configure.configure_tavily", return_value=7) as wizard,
+            patch("configure.configure", side_effect=AssertionError("Full wizard called")),
+            patch("configure.configure_pexels", side_effect=AssertionError("Pexels wizard called")),
+        ):
             self.assertEqual(main(["--tavily"]), 7)
         wizard.assert_called_once_with()
 

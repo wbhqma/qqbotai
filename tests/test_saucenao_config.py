@@ -23,7 +23,7 @@ class SauceNaoConfigTests(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
         self.original = (
-            '# preserve unrelated services and formatting\n'
+            "# preserve unrelated services and formatting\n"
             'LLM_API_KEY="test-model-key"\n'
             'VISION_PROVIDER="compatible"\n'
             'VISION_BASE_URL="https://vision.example/v1"\n'
@@ -37,13 +37,24 @@ class SauceNaoConfigTests(unittest.TestCase):
 
     def run_wizard(self, entered):
         output = io.StringIO()
-        with patch("configure.ROOT", self.root), patch("configure.getpass", return_value=entered) as prompt, \
-                patch("builtins.input", side_effect=AssertionError("Unexpected visible prompt")), \
-                contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+        with (
+            patch("configure.ROOT", self.root),
+            patch("configure.getpass", return_value=entered) as prompt,
+            patch("builtins.input", side_effect=AssertionError("Unexpected visible prompt")),
+            contextlib.redirect_stdout(output),
+            contextlib.redirect_stderr(output),
+        ):
             result = configure_saucenao()
         self.assertIn("输入不显示字符", prompt.call_args.args[0])
         visible = output.getvalue() + prompt.call_args.args[0]
-        for value in ("test-old-key", "test-saucenao-key", "test-model-key", "test-pexels-key", "test-vision-key", "test-tavily-key"):
+        for value in (
+            "test-old-key",
+            "test-saucenao-key",
+            "test-model-key",
+            "test-pexels-key",
+            "test-vision-key",
+            "test-tavily-key",
+        ):
             self.assertNotIn(value, visible)
         return result, visible
 
@@ -77,7 +88,9 @@ class SauceNaoConfigTests(unittest.TestCase):
                 result, visible = self.run_wizard(" test-saucenao-key ")
                 self.assertEqual(result, 0)
                 self.assertIn("https://saucenao.com/user.php?page=search-api", visible)
-                expected = original.replace('SAUCENAO_API_KEY="test-old-key"', "SAUCENAO_API_KEY='test-saucenao-key'")
+                expected = original.replace(
+                    'SAUCENAO_API_KEY="test-old-key"', "SAUCENAO_API_KEY='test-saucenao-key'"
+                )
                 self.assertEqual(self.path.read_bytes(), expected.encode("utf-8"))
                 self.assertEqual(sorted(p.name for p in self.root.iterdir()), [".env"])
 
@@ -131,9 +144,11 @@ class SauceNaoConfigTests(unittest.TestCase):
         self.assertEqual(sorted(p.name for p in self.root.iterdir()), [".env"])
 
     def test_cli_routes_only_to_independent_saucenao_wizard(self):
-        with patch("configure.configure_saucenao", return_value=7) as wizard, \
-                patch("configure.configure", side_effect=AssertionError("Full wizard called")), \
-                patch("configure.configure_pexels", side_effect=AssertionError("Pexels wizard called")):
+        with (
+            patch("configure.configure_saucenao", return_value=7) as wizard,
+            patch("configure.configure", side_effect=AssertionError("Full wizard called")),
+            patch("configure.configure_pexels", side_effect=AssertionError("Pexels wizard called")),
+        ):
             self.assertEqual(main(["--saucenao"]), 7)
         wizard.assert_called_once_with()
 

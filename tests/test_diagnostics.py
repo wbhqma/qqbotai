@@ -5,7 +5,13 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import nonebot
-from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageSegment, PrivateMessageEvent
+from nonebot.adapters.onebot.v11 import (
+    Bot,
+    GroupMessageEvent,
+    Message,
+    MessageSegment,
+    PrivateMessageEvent,
+)
 
 from app.chat import ChatService
 from app.config import Settings
@@ -31,7 +37,9 @@ class GroupDiagnosticTests(unittest.IsolatedAsyncioTestCase):
         # NoneBot 初始化也只在空目录里查找配置，不接触项目真实 .env。
         with tempfile.TemporaryDirectory() as folder, contextlib.chdir(folder):
             nonebot.init(driver="~none", log_level="WARNING")
-        cls.plugin = (nonebot.get_plugin("qq_chat") or nonebot.load_plugin("plugins.qq_chat")).module
+        cls.plugin = (
+            nonebot.get_plugin("qq_chat") or nonebot.load_plugin("plugins.qq_chat")
+        ).module
 
     async def asyncSetUp(self):
         diagnostics.reset()
@@ -50,9 +58,18 @@ class GroupDiagnosticTests(unittest.IsolatedAsyncioTestCase):
             message += MessageSegment.at("10000")
         message += MessageSegment.text(text)
         return GroupMessageEvent(
-            time=0, self_id=10000, post_type="message", sub_type="normal",
-            user_id=user, group_id=group, message_id=1, message_type="group",
-            message=message, raw_message=str(message), font=0, sender={"user_id": user},
+            time=0,
+            self_id=10000,
+            post_type="message",
+            sub_type="normal",
+            user_id=user,
+            group_id=group,
+            message_id=1,
+            message_type="group",
+            message=message,
+            raw_message=str(message),
+            font=0,
+            sender={"user_id": user},
         )
 
     async def deliver(self, event):
@@ -101,9 +118,12 @@ class GroupDiagnosticTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_self_and_wrong_account_have_separate_fixed_counters(self):
         await self.deliver(self.event(user=10000))
-        self.plugin.set_service(ChatService(Settings(
-            allowed_groups=frozenset({"20000"}), napcat_self_id="19999"
-        ), SimpleNamespace()))
+        self.plugin.set_service(
+            ChatService(
+                Settings(allowed_groups=frozenset({"20000"}), napcat_self_id="19999"),
+                SimpleNamespace(),
+            )
+        )
         await self.deliver(self.event())
         counts = diagnostics.snapshot()
         self.assertEqual(counts["ignored_self"], 1)
@@ -121,9 +141,17 @@ class GroupDiagnosticTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_private_messages_do_not_change_diagnostics(self):
         event = PrivateMessageEvent(
-            time=0, self_id=10000, post_type="message", sub_type="friend",
-            user_id=30000, message_id=1, message_type="private", message="/ping",
-            raw_message="/ping", font=0, sender={"user_id": 30000},
+            time=0,
+            self_id=10000,
+            post_type="message",
+            sub_type="friend",
+            user_id=30000,
+            message_id=1,
+            message_type="private",
+            message="/ping",
+            raw_message="/ping",
+            font=0,
+            sender={"user_id": 30000},
         )
         await self.plugin.track_group_event(self.bot, event)
         self.assertTrue(all(value == 0 for value in diagnostics.snapshot().values()))

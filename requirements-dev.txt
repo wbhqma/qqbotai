@@ -1,0 +1,2 @@
+# Install runtime dependencies first; these tools are for local development and CI.
+black==26.1.0

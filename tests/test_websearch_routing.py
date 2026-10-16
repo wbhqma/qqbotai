@@ -17,28 +17,56 @@ class WebSearchRoutingTests(unittest.IsolatedAsyncioTestCase):
     def setUpClass(cls):
         with tempfile.TemporaryDirectory() as folder, contextlib.chdir(folder):
             nonebot.init(driver="~none", log_level="WARNING")
-        cls.plugin = (nonebot.get_plugin("qq_chat") or nonebot.load_plugin("plugins.qq_chat")).module
+        cls.plugin = (
+            nonebot.get_plugin("qq_chat") or nonebot.load_plugin("plugins.qq_chat")
+        ).module
 
     async def asyncSetUp(self):
         self.bot = Bot(SimpleNamespace(), "10000")
         self.bot.send = AsyncMock()
         self.model = SimpleNamespace(complete=AsyncMock(return_value="普通聊天回复"))
-        self.service = ChatService(Settings(allowed_groups=frozenset({"20000"}), cooldown_seconds=0), self.model)
+        self.service = ChatService(
+            Settings(allowed_groups=frozenset({"20000"}), cooldown_seconds=0), self.model
+        )
         self.plugin.set_service(self.service)
-        self.web = SimpleNamespace(search=AsyncMock(return_value="检索总结\n来源：https://example.org/article"))
+        self.web = SimpleNamespace(
+            search=AsyncMock(return_value="检索总结\n来源：https://example.org/article")
+        )
         self.plugin.set_websearch(self.web)
         self.addCleanup(self.plugin.set_websearch, None)
 
-    def event(self, *, text="/搜索 青岛天气", group=20000, user=30000, mention=True, picture=False, message_id=1):
+    def event(
+        self,
+        *,
+        text="/搜索 青岛天气",
+        group=20000,
+        user=30000,
+        mention=True,
+        picture=False,
+        message_id=1,
+    ):
         message = Message()
         if mention:
             message += MessageSegment.at("10000")
         message += MessageSegment.text(text)
         if picture:
-            message += MessageSegment("image", {"file": "test.jpg", "url": "https://gchat.qpic.cn/image"})
-        return GroupMessageEvent(time=0, self_id=10000, post_type="message", sub_type="normal",
-                                 user_id=user, group_id=group, message_id=message_id, message_type="group",
-                                 message=message, raw_message=str(message), font=0, sender={"user_id": user})
+            message += MessageSegment(
+                "image", {"file": "test.jpg", "url": "https://gchat.qpic.cn/image"}
+            )
+        return GroupMessageEvent(
+            time=0,
+            self_id=10000,
+            post_type="message",
+            sub_type="normal",
+            user_id=user,
+            group_id=group,
+            message_id=message_id,
+            message_type="group",
+            message=message,
+            raw_message=str(message),
+            font=0,
+            sender={"user_id": user},
+        )
 
     async def test_aliases_search_only_question_and_do_not_store_results_in_history(self):
         for command in ("/搜索", "/联网", "/search"):
@@ -83,7 +111,9 @@ class WebSearchRoutingTests(unittest.IsolatedAsyncioTestCase):
         self.model.complete.assert_not_awaited()
 
     async def test_regular_chat_does_not_trigger_external_search(self):
-        await self.plugin.handle_group_message(self.bot, self.event(text="你好，搜索功能是什么意思"))
+        await self.plugin.handle_group_message(
+            self.bot, self.event(text="你好，搜索功能是什么意思")
+        )
         self.web.search.assert_not_awaited()
         self.model.complete.assert_awaited_once()
 

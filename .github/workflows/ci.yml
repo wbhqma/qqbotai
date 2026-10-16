@@ -25,9 +25,15 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
           cache: pip
-          cache-dependency-path: requirements.lock
+          cache-dependency-path: |
+            requirements.lock
+            requirements-dev.txt
       - name: Install dependencies
         run: python -m pip install -r requirements.lock
+      - name: Install development tools
+        run: python -m pip install -r requirements-dev.txt
+      - name: Check code format
+        run: python -m black --check .
       - name: Check dependencies
         run: python -m pip check
       - name: Check public files for private data

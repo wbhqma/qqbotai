@@ -40,8 +40,13 @@ def _text(value: object, limit: int, key: str) -> str:
 
 
 def _public_source(value: object, key: str) -> str | None:
-    if (not isinstance(value, str) or not value or len(value) > 400 or "\\" in value
-            or any(char.isspace() or unicodedata.category(char).startswith("C") for char in value)):
+    if (
+        not isinstance(value, str)
+        or not value
+        or len(value) > 400
+        or "\\" in value
+        or any(char.isspace() or unicodedata.category(char).startswith("C") for char in value)
+    ):
         return None
     decoded = unquote(unquote(value))
     if key and (key in value or key in decoded):
@@ -51,29 +56,60 @@ def _public_source(value: object, key: str) -> str | None:
     try:
         parsed = urlsplit(value)
         host = (parsed.hostname or "").lower().rstrip(".")
-        if (parsed.scheme != "https" or not host or parsed.username or parsed.password
-                or parsed.fragment or parsed.port not in (None, 443)):
+        if (
+            parsed.scheme != "https"
+            or not host
+            or parsed.username
+            or parsed.password
+            or parsed.fragment
+            or parsed.port not in (None, 443)
+        ):
             return None
         try:
             address = ipaddress.ip_address(host)
         except ValueError:
             ascii_host = host.encode("idna").decode("ascii")
-            if (not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?", ascii_host)
-                    or "." not in ascii_host or ascii_host.rsplit(".", 1)[-1].isdigit()
-                    or any(not label or len(label) > 63 or label.startswith("-") or label.endswith("-")
-                           for label in ascii_host.split("."))
-                    or host in ("localhost", "localhost.localdomain")
-                    or host.endswith((".localhost", ".local", ".localdomain", ".internal", ".lan",
-                                      ".home", ".invalid", ".test", ".onion"))):
+            if (
+                not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?", ascii_host)
+                or "." not in ascii_host
+                or ascii_host.rsplit(".", 1)[-1].isdigit()
+                or any(
+                    not label or len(label) > 63 or label.startswith("-") or label.endswith("-")
+                    for label in ascii_host.split(".")
+                )
+                or host in ("localhost", "localhost.localdomain")
+                or host.endswith(
+                    (
+                        ".localhost",
+                        ".local",
+                        ".localdomain",
+                        ".internal",
+                        ".lan",
+                        ".home",
+                        ".invalid",
+                        ".test",
+                        ".onion",
+                    )
+                )
+            ):
                 return None
         else:
             if not address.is_global:
                 return None
         for name, _ in parse_qsl(parsed.query, keep_blank_values=True):
             normalized = unquote(name).casefold()
-            if (any(term in normalized for term in
-                    ("token", "key", "secret", "auth", "password", "credential", "signature"))
-                    or normalized in ("sig", "pwd", "passwd", "session", "sessionid")):
+            if any(
+                term in normalized
+                for term in (
+                    "token",
+                    "key",
+                    "secret",
+                    "auth",
+                    "password",
+                    "credential",
+                    "signature",
+                )
+            ) or normalized in ("sig", "pwd", "passwd", "session", "sessionid"):
                 return None
         return value
     except (ValueError, UnicodeError):
@@ -94,7 +130,8 @@ class SauceNaoService:
     def __init__(self, settings: Settings, client: httpx.AsyncClient | None = None):
         self.settings = settings
         self.client = client or httpx.AsyncClient(
-            timeout=httpx.Timeout(25, connect=5), follow_redirects=False,
+            timeout=httpx.Timeout(25, connect=5),
+            follow_redirects=False,
         )
         self.owns_client = client is None
 
@@ -105,16 +142,24 @@ class SauceNaoService:
     async def _request(self, picture: bytes, key: str) -> dict:
         # multipart POST 已由 Sagiri 客户端源码验证；Key 不进入请求 URL。
         # hide=3 在 PicImageSearch 参数文档中表示只保留预期安全结果。
-        request = httpx.Request("POST", SEARCH_URL, headers={"Accept": "application/json"},
-                                data={"api_key": key, "output_type": "2", "numres": "5", "hide": "3"},
-                                files={"file": ("image.jpg", picture, "image/jpeg")},
-                                extensions={"timeout": httpx.Timeout(25, connect=5).as_dict()})
+        request = httpx.Request(
+            "POST",
+            SEARCH_URL,
+            headers={"Accept": "application/json"},
+            data={"api_key": key, "output_type": "2", "numres": "5", "hide": "3"},
+            files={"file": ("image.jpg", picture, "image/jpeg")},
+            extensions={"timeout": httpx.Timeout(25, connect=5).as_dict()},
+        )
         try:
             async with asyncio.timeout(25):
-                response = await self.client.send(request, auth=None, stream=True, follow_redirects=False)
+                response = await self.client.send(
+                    request, auth=None, stream=True, follow_redirects=False
+                )
                 try:
                     if response.status_code in (401, 403):
-                        raise ModelError("SauceNAO 暂时未接受连接，请管理员检查密钥与服务访问情况。")
+                        raise ModelError(
+                            "SauceNAO 暂时未接受连接，请管理员检查密钥与服务访问情况。"
+                        )
                     if response.status_code == 429:
                         raise ModelError("SauceNAO 查询额度不足或请求过于频繁，请稍后再试。")
                     if response.status_code in (400, 413, 422):
@@ -141,7 +186,9 @@ class SauceNaoService:
                         )
                         if exhausted:
                             raise ModelError("SauceNAO 查询额度不足或请求过于频繁，请稍后再试。")
-                        raise ModelError("SauceNAO 未接受本次请求，请管理员检查密钥、额度与图片格式。")
+                        raise ModelError(
+                            "SauceNAO 未接受本次请求，请管理员检查密钥、额度与图片格式。"
+                        )
                     if status > 0:
                         raise ModelError("SauceNAO 搜图服务暂时未完成查询，请稍后再试。")
                     if not isinstance(payload.get("results"), list):
@@ -177,17 +224,40 @@ class SauceNaoService:
             else:
                 urls = data.get("ext_urls", [])
                 if isinstance(urls, list):
-                    url = next((valid for item in urls
-                                if (valid := _public_source(item, key)) is not None), None)
+                    url = next(
+                        (
+                            valid
+                            for item in urls
+                            if (valid := _public_source(item, key)) is not None
+                        ),
+                        None,
+                    )
             if not url:
                 continue
-            title = next((_text(data.get(name), 90, key)
-                          for name in ("title", "material", "jp_name", "eng_name")
-                          if _text(data.get(name), 90, key)), "作品页")
-            author = next((_text(data.get(name), 80, key)
-                           for name in ("member_name", "creator", "author", "author_name", "artist",
-                                        "twitter_user_handle", "user_name")
-                           if _text(data.get(name), 80, key)), "未提供")
+            title = next(
+                (
+                    _text(data.get(name), 90, key)
+                    for name in ("title", "material", "jp_name", "eng_name")
+                    if _text(data.get(name), 90, key)
+                ),
+                "作品页",
+            )
+            author = next(
+                (
+                    _text(data.get(name), 80, key)
+                    for name in (
+                        "member_name",
+                        "creator",
+                        "author",
+                        "author_name",
+                        "artist",
+                        "twitter_user_handle",
+                        "user_name",
+                    )
+                    if _text(data.get(name), 80, key)
+                ),
+                "未提供",
+            )
             candidates.append(_Candidate(similarity, title, author, url))
         candidates.sort(key=lambda candidate: candidate.similarity, reverse=True)
         unique = []
@@ -213,6 +283,8 @@ class SauceNaoService:
             return "没有找到相似度足够、可展示的作品页候选。可以换更完整清晰的图片；搜索仅覆盖服务已收录内容。"
         lines = ["候选出处（相似度是图像匹配分数，不能认证原作者；页面署名来自检索结果）："]
         for number, candidate in enumerate(candidates, 1):
-            lines.append(f"{number}. {candidate.title}\n页面署名：{candidate.author}\n"
-                         f"相似度：{candidate.similarity:.1f}%\n{candidate.url}")
+            lines.append(
+                f"{number}. {candidate.title}\n页面署名：{candidate.author}\n"
+                f"相似度：{candidate.similarity:.1f}%\n{candidate.url}"
+            )
         return "\n\n".join(lines)

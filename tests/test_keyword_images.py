@@ -18,31 +18,58 @@ class KeywordImageTests(unittest.IsolatedAsyncioTestCase):
     def setUpClass(cls):
         with tempfile.TemporaryDirectory() as folder, contextlib.chdir(folder):
             nonebot.init(driver="~none", log_level="WARNING")
-        cls.plugin = (nonebot.get_plugin("qq_chat") or nonebot.load_plugin("plugins.qq_chat")).module
+        cls.plugin = (
+            nonebot.get_plugin("qq_chat") or nonebot.load_plugin("plugins.qq_chat")
+        ).module
 
     async def asyncSetUp(self):
         self.bot = Bot(SimpleNamespace(), "10000")
         self.bot.send = AsyncMock()
-        self.model = SimpleNamespace(complete=AsyncMock(side_effect=AssertionError("Text model must not be called")))
-        self.service = ChatService(Settings(allowed_groups=frozenset({"20000"}), cooldown_seconds=0), self.model)
+        self.model = SimpleNamespace(
+            complete=AsyncMock(side_effect=AssertionError("Text model must not be called"))
+        )
+        self.service = ChatService(
+            Settings(allowed_groups=frozenset({"20000"}), cooldown_seconds=0), self.model
+        )
         self.plugin.set_service(self.service)
         self.images = SimpleNamespace(process=AsyncMock(return_value="图片出处"))
         self.plugin.set_images(self.images)
-        self.pexels = SimpleNamespace(search=AsyncMock(return_value=PhotoResult(
-            caption="摄影师：示例作者 · Pexels\nhttps://www.pexels.com/photo/example-1/", image=b"sample-jpeg")))
+        self.pexels = SimpleNamespace(
+            search=AsyncMock(
+                return_value=PhotoResult(
+                    caption="摄影师：示例作者 · Pexels\nhttps://www.pexels.com/photo/example-1/",
+                    image=b"sample-jpeg",
+                )
+            )
+        )
         self.plugin.set_pexels(self.pexels)
         self.addCleanup(self.plugin.set_pexels, None)
 
-    def event(self, *, text="/找图 猫", group=20000, user=30000, mention=True, picture=False, message_id=1):
+    def event(
+        self, *, text="/找图 猫", group=20000, user=30000, mention=True, picture=False, message_id=1
+    ):
         message = Message()
         if mention:
             message += MessageSegment.at("10000")
         message += MessageSegment.text(text)
         if picture:
-            message += MessageSegment("image", {"url": "https://gchat.qpic.cn/image", "file": "image.jpg"})
-        return GroupMessageEvent(time=0, self_id=10000, post_type="message", sub_type="normal",
-                                 user_id=user, group_id=group, message_id=message_id, message_type="group",
-                                 message=message, raw_message=str(message), font=0, sender={"user_id": user})
+            message += MessageSegment(
+                "image", {"url": "https://gchat.qpic.cn/image", "file": "image.jpg"}
+            )
+        return GroupMessageEvent(
+            time=0,
+            self_id=10000,
+            post_type="message",
+            sub_type="normal",
+            user_id=user,
+            group_id=group,
+            message_id=message_id,
+            message_type="group",
+            message=message,
+            raw_message=str(message),
+            font=0,
+            sender={"user_id": user},
+        )
 
     async def test_keyword_aliases_send_photo_and_credit_without_text_model_or_history(self):
         for command in ("/找图", "/搜图"):
@@ -90,7 +117,9 @@ class KeywordImageTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_existing_reverse_search_with_picture_is_preserved(self):
         await self.plugin.handle_group_message(self.bot, self.event(text="/搜图", picture=True))
-        self.images.process.assert_awaited_once_with("https://gchat.qpic.cn/image", "search", "/搜图")
+        self.images.process.assert_awaited_once_with(
+            "https://gchat.qpic.cn/image", "search", "/搜图"
+        )
         self.pexels.search.assert_not_awaited()
 
     async def test_unconfigured_search_returns_literal_message_without_picture(self):
@@ -109,7 +138,9 @@ class KeywordImageTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Pexels", reply.data["text"])
 
     async def test_caption_cq_strings_are_not_interpreted_as_control_segments(self):
-        self.pexels.search.return_value = PhotoResult(caption="[CQ:at,qq=all] 摄影师 · Pexels", image=b"image")
+        self.pexels.search.return_value = PhotoResult(
+            caption="[CQ:at,qq=all] 摄影师 · Pexels", image=b"image"
+        )
         await self.plugin.handle_group_message(self.bot, self.event())
         reply = self.bot.send.call_args.args[1]
         self.assertEqual([segment.type for segment in reply], ["text", "image"])

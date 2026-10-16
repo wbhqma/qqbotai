@@ -40,18 +40,24 @@ class ChatTests(unittest.IsolatedAsyncioTestCase):
             system = self.model.calls[-1][0]
             self.assertEqual(system["role"], "system")
             # 人设允许自行修改；验证名字传入，不限定后续标点，也不在失败时打印整段人设。
-            self.assertTrue(system["content"].startswith(f"你叫{name}"), "系统提示应包含配置的机器人名字")
+            self.assertTrue(
+                system["content"].startswith(f"你叫{name}"), "系统提示应包含配置的机器人名字"
+            )
 
     async def test_duplicate_event_ignored_but_duplicate_content_preserved(self):
         await self.service.handle(self.key, "m1", "你好", self.send)
         self.assertFalse(await self.service.handle(self.key, "m1", "你好", self.send))
         await self.service.handle(self.key, "m2", "你好", self.send)
         self.assertEqual(len(self.model.calls), 2)
-        self.assertEqual([m["role"] for m in self.model.calls[1]], ["system", "user", "assistant", "user"])
+        self.assertEqual(
+            [m["role"] for m in self.model.calls[1]], ["system", "user", "assistant", "user"]
+        )
         self.assertEqual(len(self.sent), 2)
 
     async def test_group_and_user_memory_are_isolated(self):
-        for number, key in enumerate((self.key, ("test-bot", "group-b", "user-a"), ("test-bot", "group-a", "user-b"))):
+        for number, key in enumerate(
+            (self.key, ("test-bot", "group-b", "user-a"), ("test-bot", "group-a", "user-b"))
+        ):
             await self.service.handle(key, f"m{number}", "我的秘密", self.send)
         self.assertEqual([len(call) for call in self.model.calls], [2, 2, 2])
 
@@ -81,6 +87,7 @@ class ChatTests(unittest.IsolatedAsyncioTestCase):
     async def test_send_failure_can_retry_without_committing_history(self):
         async def failing_send(text):
             raise RuntimeError("QQ send failed")
+
         with self.assertRaises(RuntimeError):
             await self.service.handle(self.key, "m1", "你好", failing_send)
         self.assertEqual(self.service.sessions[self.key].messages, [])
@@ -102,10 +109,12 @@ class ChatTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_in_flight_message_does_not_mix_history(self):
         entered, release = asyncio.Event(), asyncio.Event()
+
         async def slow_model(messages):
             entered.set()
             await release.wait()
             return "第一条的回复"
+
         self.model.complete = slow_model
         first = asyncio.create_task(self.service.handle(self.key, "m1", "第一条", self.send))
         await entered.wait()
@@ -119,9 +128,18 @@ class ChatTests(unittest.IsolatedAsyncioTestCase):
 class DeepSeekTests(unittest.IsolatedAsyncioTestCase):
     async def test_real_request_shape_and_final_text_only(self):
         requests = []
+
         def handler(request):
             requests.append(request)
-            return httpx.Response(200, json={"choices": [{"message": {"content": "你好！", "reasoning_content": "不应发给群的字段"}}]})
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {"message": {"content": "你好！", "reasoning_content": "不应发给群的字段"}}
+                    ]
+                },
+            )
+
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             model = DeepSeekClient(Settings(deepseek_api_key="test-key"), client)
             self.assertEqual(await model.complete([{"role": "user", "content": "你好"}]), "你好！")
@@ -134,7 +152,11 @@ class DeepSeekTests(unittest.IsolatedAsyncioTestCase):
     async def test_http_failures_have_safe_messages(self):
         for status in (401, 402, 429, 500):
             with self.subTest(status=status):
-                async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(status, text="private-error-body"))) as client:
+                async with httpx.AsyncClient(
+                    transport=httpx.MockTransport(
+                        lambda request: httpx.Response(status, text="private-error-body")
+                    )
+                ) as client:
                     model = DeepSeekClient(Settings(deepseek_api_key="test-key"), client)
                     with self.assertRaises(ModelError) as error:
                         await model.complete([])
@@ -143,6 +165,7 @@ class DeepSeekTests(unittest.IsolatedAsyncioTestCase):
     async def test_timeout_and_empty_response_are_handled(self):
         def timeout(request):
             raise httpx.ReadTimeout("private timeout", request=request)
+
         handlers = (timeout, lambda request: httpx.Response(200, json={"choices": []}))
         for handler in handlers:
             async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:

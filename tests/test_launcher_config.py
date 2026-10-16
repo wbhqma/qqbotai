@@ -31,11 +31,14 @@ class LauncherConfigTests(unittest.TestCase):
 
     def run_check(self):
         output = io.StringIO()
-        with patch("app.config.ROOT", self.root), \
-                patch("configure.configure", side_effect=AssertionError("Interactive wizard called")), \
-                patch("builtins.input", side_effect=AssertionError("Interactive input called")), \
-                patch("configure.getpass", side_effect=AssertionError("Secret prompt called")), \
-                contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+        with (
+            patch("app.config.ROOT", self.root),
+            patch("configure.configure", side_effect=AssertionError("Interactive wizard called")),
+            patch("builtins.input", side_effect=AssertionError("Interactive input called")),
+            patch("configure.getpass", side_effect=AssertionError("Secret prompt called")),
+            contextlib.redirect_stdout(output),
+            contextlib.redirect_stderr(output),
+        ):
             result = main(["--check"])
         visible = output.getvalue()
         for value in self.values.values():
@@ -44,7 +47,9 @@ class LauncherConfigTests(unittest.TestCase):
         return result, visible
 
     def write_config(self, values):
-        self.path.write_text("\n".join(f"{key}={value}" for key, value in values.items()) + "\n", encoding="utf-8")
+        self.path.write_text(
+            "\n".join(f"{key}={value}" for key, value in values.items()) + "\n", encoding="utf-8"
+        )
 
     def test_complete_local_configuration_is_read_only_and_noninteractive(self):
         self.write_config(self.values)

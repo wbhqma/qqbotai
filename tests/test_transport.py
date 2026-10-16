@@ -11,7 +11,7 @@ import unittest
 class TransportTests(unittest.TestCase):
     def test_reverse_websocket_token_and_group_ping(self):
         root = Path(__file__).resolve().parent.parent
-        program = r'''
+        program = r"""
 import sys
 sys.path.insert(0, sys.argv[1])
 import nonebot
@@ -55,14 +55,29 @@ with TestClient(driver.server_app) as client:
         counts = client.get("/qqbotai/health").json()["diagnostics"]
         assert counts["group_events"] == 1 and counts["mentioned_events"] == 1
 print("OneBot transport check passed")
-'''
-        environment = {k: v for k, v in os.environ.items() if not k.startswith(
-            ("QQ_", "LLM_", "DEEPSEEK_", "ONEBOT_", "NAPCAT_", "VISION_", "SERPAPI_"))}
+"""
+        environment = {
+            k: v
+            for k, v in os.environ.items()
+            if not k.startswith(
+                ("QQ_", "LLM_", "DEEPSEEK_", "ONEBOT_", "NAPCAT_", "VISION_", "SERPAPI_")
+            )
+        }
         with tempfile.TemporaryDirectory() as folder:
             try:
-                result = subprocess.run([sys.executable, "-B", "-X", "utf8", "-c", program, str(root)],
-                                        cwd=folder, env=environment, capture_output=True, timeout=20)
+                result = subprocess.run(
+                    [sys.executable, "-B", "-X", "utf8", "-c", program, str(root)],
+                    cwd=folder,
+                    env=environment,
+                    capture_output=True,
+                    timeout=20,
+                )
             except subprocess.TimeoutExpired as error:
-                self.fail("Transport check timed out: " + (error.stdout or b"").decode("utf-8", errors="replace")[-2000:])
-        self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", errors="replace")[-2000:])
+                self.fail(
+                    "Transport check timed out: "
+                    + (error.stdout or b"").decode("utf-8", errors="replace")[-2000:]
+                )
+        self.assertEqual(
+            result.returncode, 0, result.stderr.decode("utf-8", errors="replace")[-2000:]
+        )
         self.assertIn(b"OneBot transport check passed", result.stdout)

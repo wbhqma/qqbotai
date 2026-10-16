@@ -12,35 +12,79 @@ from dotenv import dotenv_values
 
 ROOT = Path(__file__).resolve().parent.parent
 PRIVATE_FIELDS = {
-    "QQ_APP_ID", "QQ_APP_SECRET", "LLM_API_KEY", "DEEPSEEK_API_KEY", "QQ_ALLOWED_GROUPS",
-    "ONEBOT_ACCESS_TOKEN", "NAPCAT_ALLOWED_GROUPS", "NAPCAT_SELF_ID", "VISION_API_KEY", "SERPAPI_API_KEY",
+    "QQ_APP_ID",
+    "QQ_APP_SECRET",
+    "LLM_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "QQ_ALLOWED_GROUPS",
+    "ONEBOT_ACCESS_TOKEN",
+    "NAPCAT_ALLOWED_GROUPS",
+    "NAPCAT_SELF_ID",
+    "VISION_API_KEY",
+    "SERPAPI_API_KEY",
     "PEXELS_API_KEY",
     "TAVILY_API_KEY",
     "SAUCENAO_API_KEY",
 }
 PRIVATE_DIRS = {
-    ".git", ".venv", ".cache", ".idea", ".vscode", "__pycache__",
-    "private", "secrets", "credentials", "runtime", "logs", "data", "conversations",
+    ".git",
+    ".venv",
+    ".cache",
+    ".idea",
+    ".vscode",
+    "__pycache__",
+    "private",
+    "secrets",
+    "credentials",
+    "runtime",
+    "logs",
+    "data",
+    "conversations",
 }
 PRIVATE_NAMES = (
-    "*.env", "*.pem", "*.key", "*.p12", "*.pfx", "*.sqlite*", "*.db", "*.log*",
-    "*.bak", "*.backup", "*.zip", "*.jsonl", "credentials.json", "token.json",
-    "tokens.json", "client_secret*.json", "chat_history*",
+    "*.env",
+    "*.pem",
+    "*.key",
+    "*.p12",
+    "*.pfx",
+    "*.sqlite*",
+    "*.db",
+    "*.log*",
+    "*.bak",
+    "*.backup",
+    "*.zip",
+    "*.jsonl",
+    "credentials.json",
+    "token.json",
+    "tokens.json",
+    "client_secret*.json",
+    "chat_history*",
 )
 PATTERNS = (
-    ("API 凭证格式", re.compile(
-        r"sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}"
-        r"|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{30,}|tvly-[A-Za-z0-9_-]{16,}"
-    )),
+    (
+        "API 凭证格式",
+        re.compile(
+            r"sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}"
+            r"|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{30,}|tvly-[A-Za-z0-9_-]{16,}"
+        ),
+    ),
     ("私钥", re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----")),
-    ("明文密钥赋值", re.compile(
-        r"(?:app_?secret|client_?secret|api_?key|access_?token)"
-        r"[\"']?\s*[:=]\s*[\"']?([A-Za-z0-9_/-]{20,})", re.I
-    )),
-    ("个人主目录路径", re.compile(
-        r"[A-Z]:[\\/]+Users[\\/]+(?!Public\b|Default\b|example\b|<)[^\s\\/\"']+"
-        r"|/(?:Users|home)/(?!runner\b|user\b|example\b|<)[^\s/\"']+", re.I
-    )),
+    (
+        "明文密钥赋值",
+        re.compile(
+            r"(?:app_?secret|client_?secret|api_?key|access_?token)"
+            r"[\"']?\s*[:=]\s*[\"']?([A-Za-z0-9_/-]{20,})",
+            re.I,
+        ),
+    ),
+    (
+        "个人主目录路径",
+        re.compile(
+            r"[A-Z]:[\\/]+Users[\\/]+(?!Public\b|Default\b|example\b|<)[^\s\\/\"']+"
+            r"|/(?:Users|home)/(?!runner\b|user\b|example\b|<)[^\s/\"']+",
+            re.I,
+        ),
+    ),
 )
 
 
@@ -82,7 +126,10 @@ def git(root: Path, *arguments: str) -> bytes:
     try:
         return subprocess.run(
             ["git", "--git-dir=" + str(root / ".git"), "--work-tree=" + str(root), *arguments],
-            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=root,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=root,
         ).stdout
     except (OSError, subprocess.CalledProcessError):
         raise RuntimeError("无法读取 Git 文件清单；请在 Git 仓库中运行检查。") from None
@@ -104,7 +151,9 @@ def check_project(root: Path, *, staged: bool = False) -> tuple[list[Finding], i
     root = root.resolve()
     known = local_private_values(root)
     options = ("--cached",) if staged else ("--cached", "--others", "--exclude-standard")
-    files = sorted(set(filter(None, git(root, "ls-files", "-z", *options).decode("utf-8").split("\0"))))
+    files = sorted(
+        set(filter(None, git(root, "ls-files", "-z", *options).decode("utf-8").split("\0")))
+    )
     findings = []
     for relative in files:
         if private_path(relative):

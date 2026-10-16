@@ -18,7 +18,9 @@ class NapCatPrepareTests(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
         self.env = self.root / ".env"
-        self.env.write_text("ONEBOT_ACCESS_TOKEN=0123456789abcdef\nNAPCAT_PORT=8082\n", encoding="utf-8")
+        self.env.write_text(
+            "ONEBOT_ACCESS_TOKEN=0123456789abcdef\nNAPCAT_PORT=8082\n", encoding="utf-8"
+        )
         self.workdir = self.root / "runtime"
 
     def test_default_account_template_uses_local_connection_and_separate_panel_token(self):
@@ -37,9 +39,16 @@ class NapCatPrepareTests(unittest.TestCase):
         folder = self.workdir / "config"
         folder.mkdir(parents=True)
         path = folder / "onebot11_10000.json"
-        original = {"custom": True, "network": {"websocketClients": [
-            {"name": "other-client", "enable": False}, {"name": "qqbotai-local", "token": "old"}],
-            "httpServers": [{"name": "existing-server"}]}}
+        original = {
+            "custom": True,
+            "network": {
+                "websocketClients": [
+                    {"name": "other-client", "enable": False},
+                    {"name": "qqbotai-local", "token": "old"},
+                ],
+                "httpServers": [{"name": "existing-server"}],
+            },
+        }
         path.write_text(json.dumps(original), encoding="utf-8")
         prepare(self.env, self.workdir)
         updated = json.loads(path.read_text(encoding="utf-8"))
@@ -47,7 +56,9 @@ class NapCatPrepareTests(unittest.TestCase):
         self.assertEqual(updated["network"]["websocketClients"][0]["name"], "other-client")
         self.assertEqual(len(updated["network"]["websocketClients"]), 2)
         self.assertEqual(updated["network"]["httpServers"], original["network"]["httpServers"])
-        self.assertEqual(json.loads(path.with_suffix(".json.bak").read_text(encoding="utf-8")), original)
+        self.assertEqual(
+            json.loads(path.with_suffix(".json.bak").read_text(encoding="utf-8")), original
+        )
 
     def test_repeated_prepare_is_idempotent_and_keeps_panel_token(self):
         prepare(self.env, self.workdir)
@@ -66,27 +77,38 @@ class NapCatPrepareTests(unittest.TestCase):
         self.assertFalse((folder / "onebot11.json").exists())
 
     def test_missing_token_and_invalid_port_do_not_write_config(self):
-        for content in ("ONEBOT_ACCESS_TOKEN=short\n", "ONEBOT_ACCESS_TOKEN=0123456789abcdef\nNAPCAT_PORT=bad\n"):
+        for content in (
+            "ONEBOT_ACCESS_TOKEN=short\n",
+            "ONEBOT_ACCESS_TOKEN=0123456789abcdef\nNAPCAT_PORT=bad\n",
+        ):
             self.env.write_text(content, encoding="utf-8")
             with patch.dict(os.environ, {}, clear=True), self.assertRaises(ValueError):
                 prepare(self.env, self.workdir)
             self.assertFalse(self.workdir.exists())
 
     def test_environment_overrides_match_server_settings(self):
-        with patch.dict(os.environ, {"ONEBOT_ACCESS_TOKEN": "fedcba9876543210", "NAPCAT_PORT": "8093"}):
+        with patch.dict(
+            os.environ, {"ONEBOT_ACCESS_TOKEN": "fedcba9876543210", "NAPCAT_PORT": "8093"}
+        ):
             prepare(self.env, self.workdir)
             with patch("app.config.ROOT", self.root):
                 settings = Settings.load()
-        client = json.loads((self.workdir / "config/onebot11.json").read_text(encoding="utf-8"))["network"]["websocketClients"][0]
+        client = json.loads((self.workdir / "config/onebot11.json").read_text(encoding="utf-8"))[
+            "network"
+        ]["websocketClients"][0]
         self.assertEqual(client["token"], settings.onebot_access_token)
         self.assertEqual(client["url"], f"ws://127.0.0.1:{settings.napcat_port}/onebot/v11/")
         self.assertEqual(settings.napcat_port, 8093)
 
     def test_quoted_token_whitespace_matches_server_settings(self):
-        self.env.write_text('ONEBOT_ACCESS_TOKEN="  0123456789abcdef  "\nNAPCAT_PORT=8082\n', encoding="utf-8")
+        self.env.write_text(
+            'ONEBOT_ACCESS_TOKEN="  0123456789abcdef  "\nNAPCAT_PORT=8082\n', encoding="utf-8"
+        )
         prepare(self.env, self.workdir)
         with patch("app.config.ROOT", self.root):
             settings = Settings.load()
-        client = json.loads((self.workdir / "config/onebot11.json").read_text(encoding="utf-8"))["network"]["websocketClients"][0]
+        client = json.loads((self.workdir / "config/onebot11.json").read_text(encoding="utf-8"))[
+            "network"
+        ]["websocketClients"][0]
         self.assertEqual(client["token"], settings.onebot_access_token)
         self.assertEqual(client["token"], "0123456789abcdef")

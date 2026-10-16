@@ -1,6 +1,5 @@
 """只累计固定事件计数，不保存消息、账号、时间或异常内容。"""
 
-
 COUNTERS = (
     "group_events",
     "mentioned_events",

@@ -44,18 +44,24 @@ def _text(value: object, limit: int, key: str, *, multiline: bool = False) -> st
     value = value.replace(key, "[已隐藏]") if key else value
     # URL 仅由代码从已校验的来源字段输出，网页摘要或模型不能增加链接。
     value = re.sub(r"(?i)\bhttps?://\S+", "", value)
-    value = "".join(char for char in value
-                    if not unicodedata.category(char).startswith("C")
-                    or (multiline and char == "\n"))
+    value = "".join(
+        char
+        for char in value
+        if not unicodedata.category(char).startswith("C") or (multiline and char == "\n")
+    )
     if multiline:
         return "\n".join(" ".join(line.split()) for line in value.splitlines()).strip()[:limit]
     return " ".join(value.split())[:limit]
 
 
 def _public_url(value: object, key: str) -> str | None:
-    if (not isinstance(value, str) or not value or len(value) > MAX_URL
-            or "\\" in value or any(char.isspace() or unicodedata.category(char).startswith("C")
-                                      for char in value)):
+    if (
+        not isinstance(value, str)
+        or not value
+        or len(value) > MAX_URL
+        or "\\" in value
+        or any(char.isspace() or unicodedata.category(char).startswith("C") for char in value)
+    ):
         return None
     decoded = unquote(unquote(value))
     if key and (key in value or key in decoded):
@@ -65,30 +71,60 @@ def _public_url(value: object, key: str) -> str | None:
     try:
         parsed = urlsplit(value)
         host = (parsed.hostname or "").lower().rstrip(".")
-        if (parsed.scheme not in ("http", "https") or not host or parsed.username
-                or parsed.password or parsed.fragment
-                or parsed.port not in (None, 443 if parsed.scheme == "https" else 80)):
+        if (
+            parsed.scheme not in ("http", "https")
+            or not host
+            or parsed.username
+            or parsed.password
+            or parsed.fragment
+            or parsed.port not in (None, 443 if parsed.scheme == "https" else 80)
+        ):
             return None
         try:
             address = ipaddress.ip_address(host)
         except ValueError:
             ascii_host = host.encode("idna").decode("ascii")
-            if (not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?", ascii_host)
-                    or "." not in ascii_host or ascii_host.rsplit(".", 1)[-1].isdigit()
-                    or any(not label or len(label) > 63 or label.startswith("-") or label.endswith("-")
-                           for label in ascii_host.split("."))
-                    or host in ("localhost", "localhost.localdomain")
-                    or host.endswith((".localhost", ".local", ".localdomain", ".internal", ".lan",
-                                      ".home", ".invalid", ".test", ".onion"))):
+            if (
+                not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?", ascii_host)
+                or "." not in ascii_host
+                or ascii_host.rsplit(".", 1)[-1].isdigit()
+                or any(
+                    not label or len(label) > 63 or label.startswith("-") or label.endswith("-")
+                    for label in ascii_host.split(".")
+                )
+                or host in ("localhost", "localhost.localdomain")
+                or host.endswith(
+                    (
+                        ".localhost",
+                        ".local",
+                        ".localdomain",
+                        ".internal",
+                        ".lan",
+                        ".home",
+                        ".invalid",
+                        ".test",
+                        ".onion",
+                    )
+                )
+            ):
                 return None
         else:
             if not address.is_global:
                 return None
         for name, _ in parse_qsl(parsed.query, keep_blank_values=True):
             normalized = unquote(name).casefold()
-            if (any(term in normalized for term in
-                    ("token", "key", "secret", "auth", "password", "credential", "signature"))
-                    or normalized in ("sig", "pwd", "passwd", "session", "sessionid")):
+            if any(
+                term in normalized
+                for term in (
+                    "token",
+                    "key",
+                    "secret",
+                    "auth",
+                    "password",
+                    "credential",
+                    "signature",
+                )
+            ) or normalized in ("sig", "pwd", "passwd", "session", "sessionid"):
                 return None
         return value
     except (ValueError, UnicodeError):
@@ -109,11 +145,14 @@ def _published_date(value: object) -> str | None:
 
 
 class WebSearchService:
-    def __init__(self, settings: Settings, model: ChatModel, client: httpx.AsyncClient | None = None):
+    def __init__(
+        self, settings: Settings, model: ChatModel, client: httpx.AsyncClient | None = None
+    ):
         self.settings = settings
         self.model = model
         self.client = client or httpx.AsyncClient(
-            timeout=httpx.Timeout(20, connect=5), follow_redirects=False,
+            timeout=httpx.Timeout(20, connect=5),
+            follow_redirects=False,
         )
         self.owns_client = client is None
 
@@ -122,17 +161,32 @@ class WebSearchService:
             await self.client.aclose()
 
     async def _request(self, question: str, key: str) -> dict:
-        request = httpx.Request("POST", SEARCH_URL, headers={
-            "Authorization": "Bearer " + key, "Accept": "application/json",
-        }, json={
-            "query": question, "search_depth": "basic", "max_results": MAX_RESULTS,
-            "include_answer": False, "include_raw_content": False, "include_images": False,
-            "auto_parameters": False, "safe_search": True, "include_published_date": True,
-        }, extensions={"timeout": httpx.Timeout(20, connect=5).as_dict()})
+        request = httpx.Request(
+            "POST",
+            SEARCH_URL,
+            headers={
+                "Authorization": "Bearer " + key,
+                "Accept": "application/json",
+            },
+            json={
+                "query": question,
+                "search_depth": "basic",
+                "max_results": MAX_RESULTS,
+                "include_answer": False,
+                "include_raw_content": False,
+                "include_images": False,
+                "auto_parameters": False,
+                "safe_search": True,
+                "include_published_date": True,
+            },
+            extensions={"timeout": httpx.Timeout(20, connect=5).as_dict()},
+        )
         try:
             async with asyncio.timeout(20):
                 # 不继承共享客户端的 Cookie、默认 Authorization 或其他服务的密钥。
-                response = await self.client.send(request, auth=None, stream=True, follow_redirects=False)
+                response = await self.client.send(
+                    request, auth=None, stream=True, follow_redirects=False
+                )
                 try:
                     if response.status_code in (401, 403):
                         raise ModelError("联网搜索鉴权失败，请管理员检查 TAVILY_API_KEY。")
@@ -151,7 +205,9 @@ class WebSearchService:
                             raise ValueError
                         data.extend(chunk)
                     payload = json.loads(data)
-                    if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
+                    if not isinstance(payload, dict) or not isinstance(
+                        payload.get("results"), list
+                    ):
                         raise ValueError
                     return payload
                 finally:
@@ -176,10 +232,14 @@ class WebSearchService:
             if identity in seen:
                 continue
             seen.add(identity)
-            sources.append(_Source(
-                title=_text(row.get("title"), 90, key) or "检索网页",
-                url=url, content=content, published_date=_published_date(row.get("published_date")),
-            ))
+            sources.append(
+                _Source(
+                    title=_text(row.get("title"), 90, key) or "检索网页",
+                    url=url,
+                    content=content,
+                    published_date=_published_date(row.get("published_date")),
+                )
+            )
             if len(sources) == MAX_RESULTS:
                 break
         if not sources:
@@ -187,8 +247,12 @@ class WebSearchService:
         return sources
 
     async def search(self, question: str) -> str:
-        if (not isinstance(question, str) or not question.strip() or len(question) > 300
-                or any(unicodedata.category(char).startswith("C") for char in question)):
+        if (
+            not isinstance(question, str)
+            or not question.strip()
+            or len(question) > 300
+            or any(unicodedata.category(char).startswith("C") for char in question)
+        ):
             raise ModelError("请输入 1—300 字的搜索问题，不要包含控制字符。")
         question = question.strip()
         key = self.settings.tavily_api_key.strip()
@@ -201,17 +265,33 @@ class WebSearchService:
         references = "\n\n来源：\n" + "\n".join(
             f"[{number}] {source.title}\n{source.url}" for number, source in enumerate(sources, 1)
         )
-        evidence = [{"source_id": number, "title": source.title, "url": source.url,
-                     "content": source.content, "published_date": source.published_date}
-                    for number, source in enumerate(sources, 1)]
+        evidence = [
+            {
+                "source_id": number,
+                "title": source.title,
+                "url": source.url,
+                "content": source.content,
+                "published_date": source.published_date,
+            }
+            for number, source in enumerate(sources, 1)
+        ]
         try:
             async with asyncio.timeout(45):
-                answer = await self.model.complete([
-                    {"role": "system", "content": SEARCH_INSTRUCTION},
-                    {"role": "user", "content": json.dumps({
-                        "question": question, "untrusted_search_results": evidence,
-                    }, ensure_ascii=False)},
-                ])
+                answer = await self.model.complete(
+                    [
+                        {"role": "system", "content": SEARCH_INSTRUCTION},
+                        {
+                            "role": "user",
+                            "content": json.dumps(
+                                {
+                                    "question": question,
+                                    "untrusted_search_results": evidence,
+                                },
+                                ensure_ascii=False,
+                            ),
+                        },
+                    ]
+                )
             summary = _text(answer, MAX_SUMMARY, key, multiline=True)
             if not summary:
                 raise ValueError

@@ -1,197 +1,218 @@
 # qqbotai
 
-使用你自己的普通 QQ 账号运行的群聊 AI，基于 Python + NoneBot2，通过 NapCat / OneBot V11 接收和发送消息。无需注册官方机器人，也不需要 QQ 开放平台 AppID / AppSecret。只有允许的群中明确 @登录的 QQ 时回复，默认 AI 名字为“哦鲸鲸”，已有自定义人设已保留。
+用自己的 QQ 账号运行群聊 AI，基于 Python、NoneBot2 和 NapCat / OneBot V11。仅在允许的群中被明确 @ 时回复，支持多模型聊天、看图、联网搜索和图片溯源。默认名字为“哦鲸鲸”，可自定义名字与人设。
 
-支持文本聊天、近期记忆、多模型协议、看图分析、Tavily 联网搜索、Pexels 关键词找图及以图搜图。模型和搜索服务需由运行者自行配置；未配置对应服务时会提示管理员，不会调用该服务。
-
-## Windows 启动
-
-本机项目目录为 `D:\Project\兴趣班\qqbotai`。Python 程序和 NapCat 是两个进程，需要保留两个终端窗口。
-
-### 1. 启动 AI 程序并完成本机配置
-
-在 PowerShell 运行：
-
-```powershell
-Set-Location 'D:\Project\兴趣班\qqbotai'
-.\start.ps1
-```
-
-启动脚本会先检查配置；缺少 Token、允许的群号或字段格式无效时，自动打开本机配置向导。填写真实 QQ 群号，多个群用英文逗号分隔。`NAPCAT_SELF_ID` 可以填写准备用来运行 AI 的个人 QQ 号，也可以留空。OneBot Token 留空会自动生成；文本模型密钥可以稍后填写，先用 `/ping` 检查 QQ 收发。
-
-配置值保存在本机 `.env`，敏感输入不回显；向导保留已有模型配置和机器人名字。以后修改配置可单独运行 `.\configure.ps1`。保存成功后，程序开始等待 NapCat 连接，保留此窗口。
-
-仅修改允许回复的群时，可运行 `.\configure.ps1 -Groups`（或 `python configure.py --groups`），填写群资料页中的真实群号，其他模型与连接设置保持原值。输入不显示字符；保存后重启 AI 程序生效。
-
-Python 环境默认在 `D:\IDE\python-envs\qqbotai`；如环境尚未创建，启动脚本会调用 `.\setup.ps1` 安装依赖。也可提前运行该脚本。`QQBOT_VENV` 可指定其他环境目录，`QQBOT_PYTHON` 可指定基础 Python 解释器。
-
-### 2. 启动 NapCat，并在本机登录自己的 QQ
-
-本机已准备 NapCat v4.18.38 的官方 Windows.Node 便携包。另开一个 PowerShell 窗口：
-
-```powershell
-Set-Location 'D:\Project\兴趣班\qqbotai'
-.\start-napcat.ps1
-```
-
-脚本会准备本机反向 WebSocket 地址、Token、数组消息格式及仅本机可访问的 WebUI，然后运行 NapCat。按终端提示在终端或本机 WebUI 扫码登录你自己的 QQ。登录操作只在本机完成，Python 项目不接收 QQ 密码。
-
-| 目录 | 用途 |
-| --- | --- |
-| `D:\IDE\NapCat\runtime-v4.18.38` | NapCat 便携程序，应包含 `node.exe` 和 `index.js` |
-| `D:\IDE\NapCat\qqbotai-data` | 本项目独立的 NapCat 配置、日志、缓存等运行数据 |
-| `D:\IDE\python-envs\qqbotai` | Python 环境和依赖 |
-
-反向 WebSocket 默认连接 `ws://127.0.0.1:8082/onebot/v11/`；端口和 Token 由辅助脚本与本机配置同步，无需再次手工填写。WebUI 默认端口为 `6099`，入口以本机终端提示为准。OneBot 监听与 WebUI 仅绑定本机地址，NapCat 与 Python 在同一台电脑运行。
-
-修改 Token 或端口后，停止两个程序并重新启动；不要在 NapCat 已运行时同步配置。其他电脑需要自行从 [NapCat 官方发布页](https://github.com/NapNeko/NapCatQQ/releases) 准备对应便携包，本源码仓库不包含 NapCat 程序。安装和登录问题可参考 [NapCat 项目文档](https://napneko.github.io/)。
-
-### 3. 确认连接并测试群消息
-
-在项目目录另开终端查询本机连接状态：
-
-```powershell
-& 'D:\IDE\python-envs\qqbotai\Scripts\python.exe' bot.py --status
-```
-
-`QQ 连接已建立` 表示 NapCat 已连接到 AI 程序；`等待 NapCat 登录或连接` 表示 AI 程序已运行，但尚未接上 QQ。此查询不显示账号、群号或密钥。然后在允许的群里 **@刚刚登录的 QQ，发送 `/ping`**；收到“我在线”才算群收发联调完成，不会消耗模型额度。
-
-`start.ps1 -Check` 仅检查配置读取及插件装配，不交互、不登录 QQ，也不调用模型或搜索服务；检查通过不代表 QQ 已连接。`python configure.py --check` 则检查启动所需的 Token、允许群号和字段格式，未就绪时返回退出码 `2`。
-
-连接正常但没有回复时，可运行 `python bot.py --diagnose` 查看本机累计的匿名事件计数，区分消息未到达、未明确 @、群不在允许列表或回复发送失败。诊断只保留固定名称的次数，不记录消息、账号、群号、图片地址或异常原文，重启后清零。
-
-连接规范见 [NoneBot OneBot 配置](https://onebot.adapters.nonebot.dev/docs/guide/setup/) 与 [Token 配置](https://onebot.adapters.nonebot.dev/docs/guide/configuration/)。
+QQ 收发和 AI 服务分别运行；无需 QQ 开放平台的 AppID / AppSecret。模型、视觉和搜索功能按需配置，各服务的 API Key 与额度独立。
 
 ## 群内使用
 
-所有操作均需在允许的群里 **明确 @机器人**。私聊、普通群消息、@全体成员、只引用机器人或只输入昵称都不触发。
+在群成员列表中选择并 **@运行机器人的 QQ**。下表中的命令都要带上这个 @。
 
-| 消息 | 功能 |
+| 发送内容 | 功能 |
 | --- | --- |
-| @机器人 /ping | 检查 QQ 收发，不调用模型 |
-| @机器人 你好 | 文本聊天 |
-| @机器人 /清空 | 清空自己在当前群的近期文字记忆 |
-| @机器人 /搜索 青岛最近有什么新闻 | Tavily 检索网页，再由当前文本模型总结并附来源 |
-| @机器人 /识图 图片里写了什么 + 一张图片 | 看图回答、提取文字 |
-| @机器人 + 一张图片 | 默认客观描述图片 |
-| @机器人 /找图 猫 | 从 Pexels 摄影图库找一张图片，并附摄影师与来源链接 |
-| @机器人 /搜图 海边 | 没有附图时，按关键词从 Pexels 找图 |
-| @机器人 /查出处 + 一张图片 | 查插画候选作品页、页面署名与相似度，支持 `/出处` 别名 |
-| @机器人 /搜图 + 一张图片 | 返回最多 3 条来源/相似网页链接 |
-| @机器人 /帮助 | 查看命令和上传说明 |
+| 只 @机器人，不附文字或附件 | 展示全部功能菜单及配置状态 |
+| @机器人 /帮助 | 展示同一份菜单，支持 `/help`、`帮助` |
+| @机器人 你好 | 与当前文本模型聊天，保留近期文字对话 |
+| @机器人 /清空 | 清空自己在当前群的近期记忆，支持 `/reset`、`清空记忆` |
+| @机器人 /ping | 检查 QQ 收发，不调用模型，支持 `ping` |
+| @机器人 /搜索 Python 官方文档 | Tavily 检索网页，模型总结并附来源；别名 `/联网`、`/search` |
+| @机器人 /识图 图片里写了什么 + 一张图 | 看图回答或提取文字，问题可省略 |
+| @机器人 + 一张图 | 默认描述图片 |
+| @机器人 /查出处 + 一张图 | 查插画候选作品页、页面署名与相似度，支持 `/出处` |
+| @机器人 /找图 海边 | 从 Pexels 摄影图库找一张图，附摄影师和来源 |
+| @机器人 /搜图 + 一张图 | 与 `/查出处` 相同 |
+| @机器人 /搜图 海边（不附图） | 与 `/找图 海边` 相同 |
 
-图片与命令应在同一条消息发送，当前一次处理一张图；不读取被引用消息中的图片。支持 JPEG、PNG、WebP、GIF 首帧，输入最多 5 MB、2000 万像素。图片解码后去掉 EXIF 并压缩，不在本机保存图片，也不把图片、图片 URL 或分析结果加入后续聊天记忆。模型输出以文字消息发送，不把模型返回的 CQ 码当作控制指令。
+菜单始终列出全部功能，未完成相应服务配置的功能标为“未配置”。“已配置”只说明配置已填写，不代表鉴权成功、余额充足或服务在线；查看菜单不调用外部服务，也不加入聊天记忆。
 
-## 配置
+图片和命令须在**同一条消息**发送，一次一张；不读取引用消息中的图片。支持 JPEG、PNG、WebP、GIF 首帧，最大 5 MB、2000 万像素。图片会去除 EXIF 并压缩后处理。
 
-可以运行向导，或参考 `.env.example` 编辑本机 `.env`。公开示例里的 QQ 号、群号、Token 和 API Key 必须为空；系统环境变量优先于 `.env`。
+普通群消息、私聊、@全体成员、只引用机器人、手打昵称及机器人自己发送的消息均不触发。只有允许群中的明确 @ 才会处理。
 
-| 字段 | 用途 |
+## 快速开始：Windows
+
+准备 Python 3.11+、PowerShell 和用于登录的 QQ 账号。克隆或下载本仓库，进入项目根目录后操作；源码可放在任意有读写权限的目录。
+
+### 1. 准备 NapCat
+
+从 [NapCat 官方发布页](https://github.com/NapNeko/NapCatQQ/releases) 下载 Windows.Node 便携包并解压。仓库中的启动脚本使用以下默认目录：
+
+| 位置 | 用途 |
 | --- | --- |
-| `BOT_NAME` | AI 自称，默认“哦鲸鲸”；性格在 `app/persona.py` |
-| `ONEBOT_ACCESS_TOKEN` | 至少 16 位，与 NapCat 配置一致，向导可自动生成 |
-| `NAPCAT_PORT` | 本机监听端口，默认 8082 |
-| `NAPCAT_ALLOWED_GROUPS` | 必填，真实 QQ 群号，用英文逗号分隔；空列表不回复任何群 |
-| `NAPCAT_SELF_ID` | 可选，只处理这个登录 QQ 的事件 |
-| `LLM_PROVIDER` | `deepseek` / `compatible` / `openai` / `anthropic` / `gemini` / `ollama` |
-| `LLM_BASE_URL` | 模型 API 根地址；compatible 必填，其他协议提供默认地址 |
-| `LLM_MODEL` | 账号实际可调用的模型 ID；DeepSeek 留空用项目默认值 |
-| `LLM_API_KEY` | 文本模型密钥；本机 Ollama 可以为空 |
-| `LLM_MAX_TOKENS` | 输出预算，默认 2048 |
-| `LLM_EXTRA_BODY` | 模型专用参数 JSON，不得覆盖核心消息和输出上限 |
-| `LLM_TOKEN_PARAM` | compatible 接口可选择 max_tokens 或 max_completion_tokens |
-| `HISTORY_TURNS` | 近期完整文字对话轮数，默认 6，上限 10 |
-| `COOLDOWN_SECONDS` | 每个会话调用间隔，默认 3 秒 |
-| `VISION_PROVIDER` | 视觉模型协议：compatible / openai / anthropic / gemini / ollama |
-| `VISION_BASE_URL` | 视觉接口地址；compatible 必填，其他协议提供默认地址 |
-| `VISION_MODEL` | 必须是支持图片输入的视觉模型，不能仅用文本模型名称代替 |
-| `VISION_API_KEY` | 视觉接口独立密钥，不自动沿用文本服务的密钥 |
-| `SERPAPI_API_KEY` | SerpApi 搜图服务独立密钥 |
-| `PEXELS_API_KEY` | Pexels 关键词找图独立密钥，与模型密钥分开 |
-| `TAVILY_API_KEY` | Tavily 网页检索独立密钥，用于 `/搜索` |
-| `SAUCENAO_API_KEY` | SauceNAO 插画溯源密钥，用于 `/查出处` 或附图的 `/搜图` |
+| `D:\IDE\NapCat\runtime-v4.18.38` | NapCat 运行程序，根目录应有 `node.exe` 和 `index.js` |
+| `D:\IDE\NapCat\qqbotai-data` | 本项目的 NapCat 配置、登录相关数据、缓存与日志 |
+| `D:\IDE\python-envs\qqbotai` | Python 虚拟环境和依赖 |
 
-### 文本与视觉模型
+这是启动脚本约定的目录布局，仓库不附带 NapCat。使用其他 NapCat 目录或版本时，调整 `start-napcat.ps1` 中的运行目录；安装问题见 [NapCat 文档](https://napneko.github.io/)。
 
-文本聊天保留 DeepSeek、兼容 Chat Completions、OpenAI Responses、Claude Messages、Gemini GenerateContent 以及本机 Ollama 接入。视觉功能另外配置 `VISION_*`，两个模块可以使用不同服务商。更换模型后重启生效。
-
-compatible 的地址通常填到 `/v1` 层，程序追加 `/chat/completions`；OpenAI 使用 `/responses`；Claude 使用 `/messages`；Gemini 使用 GenerateContent。视觉接口可发送图片的 Base64 数据，不把原始 QQ 签名图片地址发给模型。模型 ID、可用区域、费用和输入规则以服务商当前文档及自己的账号权限为准。
-
-API 依据：[OpenAI 官方图片文档](https://developers.openai.com/api/docs/guides/images-vision)、[Claude Vision](https://platform.claude.com/docs/en/build-with-claude/vision)、[Gemini 图片理解](https://ai.google.dev/gemini-api/docs/image-understanding)、[千问视觉](https://help.aliyun.com/zh/model-studio/vision)。
-
-### 联网搜索（Tavily）
-
-在 [Tavily 控制台](https://app.tavily.com/) 注册并取得 API Key，再运行 `.\configure.ps1 -Tavily`（或 `python configure.py --tavily`）在本机隐藏填写。回车保留已有值，输入 `-` 禁用；只修改该密钥，保存后重启 AI 程序。密钥不要发到群或上传仓库。
-
-发送 `@机器人 /搜索 青岛最近有什么新闻`；`/联网`、`/search` 是别名。仅这些明确命令会发起检索，普通聊天保持原行为。程序把本次问题交给 Tavily 的 basic 搜索，然后把有限的网页摘要交给当前文本模型总结，在回复末尾附检索到的来源链接；模型总结失败时仍展示检索摘要和来源，不用模型旧知识冒充搜索结果。
-
-该功能使用 Tavily 搜索额度和当前模型的 Token。参见 [Tavily Search 文档](https://docs.tavily.com/documentation/api-reference/endpoint/search)。不会将 QQ 标识、群号、聊天历史或附件发给 Tavily，不自动读取搜索结果网页；网页内容按不可信数据处理，搜索问题和结果不写入聊天历史或磁盘。来源链接帮助核验，搜索结果和模型总结仍可能有误。
-
-### 关键词找图（Pexels）
-
-在 [Pexels API 页面](https://www.pexels.com/api/new/) 申请 Key，然后运行 `.\configure.ps1 -Pexels`（或 `python configure.py --pexels`）在本机隐藏输入；回车保留已有值，输入 `-` 清空禁用。该向导只修改 Pexels 密钥，保存后重启 AI 程序。
-
-使用 `@机器人 /找图 猫` 或不附图的 `/搜图 海边`。每次返回一张摄影图片，附摄影师、Pexels 名称与照片来源页面；不是全网图片搜索或插画溯源。只向 Pexels 发送关键词，不使用模型，也不上传群图片或账号标识。结果按 [Pexels API 文档](https://www.pexels.com/api/documentation/) 保留署名与来源。
-
-程序只从 Pexels 图片域名下载有限大小的图片，去元数据后以内存图片发送；下载失败则返回来源链接。关键词和结果不写入聊天历史或磁盘。少量已验证的图片元数据可在进程内缓存最多 24 小时，重启清空。
-
-### 插画溯源（SauceNAO）
-
-图片描述、关键词搜图和以图查出处是不同功能。Tavily 负责文本网页检索，Pexels 负责摄影关键词找图，插画溯源由 SauceNAO 匹配图片索引，不由语言模型猜原作者。
-
-登录 [SauceNAO 账号 API 页面](https://saucenao.com/user.php?page=search-api) 获取 Key，运行 `.\configure.ps1 -SauceNao`（或 `python configure.py --saucenao`）在本机隐藏填写，保存后重启 AI。回车保留，输入 `-` 清空。未配置图片溯源服务时不会下载、上传本次图片。额度以自己的账号及服务返回状态为准。
-
-同一条消息发送 `@机器人 /查出处` 和一张插画；附图的 `/搜图`、`/出处` 也可使用。返回最多 3 个可展示候选、相似度与页面署名，不下载或转发结果缩略图。低相似度、无来源链接或隐藏结果不作为可展示候选。索引未收录、裁剪或较大改动可能找不到匹配；相似度不等于原作或作者认证。
-
-查询时仅上传去元数据并压缩的 JPEG 与 SauceNAO 自身凭证，不传原始 QQ 签名 URL、群号、发送者或聊天历史；不保存图片与结果。如果同时配置 SauceNAO 和 SerpApi，优先使用 SauceNAO，不自动把同一图片再传给另一服务。
-
-### 通用以图搜图（可选，SerpApi）
-
-`/搜图` 使用 [SerpApi Google Lens](https://serpapi.com/google-lens-api)，需要单独申请并填写该服务的 API Key，可能计费。程序将图片压缩为小于 500 KB 的 JPEG，通过 [Image API](https://serpapi.com/image-api) 上传，再用 image_id 搜索。不会向搜索服务发送原始 QQ 图片 URL、群号或用户 QQ 号。
-
-搜索启用 `safe=active`，只返回普通来源/相似网页链接，不自动转发搜索结果图片。相似结果可能不是原始出处，不能据此确认作者或人物身份。图片 ID 的有效期及服务端数据处理方式以 SerpApi 文档为准；本程序不能保证第三方服务删除其副本。
-
-## 隐私与运行行为
-
-云端识图会把压缩图片及问题发送到所配置视觉服务；搜图会上传压缩图片到 SerpApi。请让群成员了解用途。聊天问题和保留的近期文字内容会发送到所配置文本模型。OpenAI 请求设置 `store=false`，实际保留规则仍由平台决定。
-
-本项目 Python 日志仅保留固定诊断摘要，不输出原始消息、QQ 号、群号、图片 URL、密钥、API 响应或异常堆栈。NapCat 自身的终端与 WebUI 可能显示登录二维码、账号或管理入口信息。`D:\IDE\NapCat\qqbotai-data` 用于 NapCat 配置、日志、缓存等运行数据；QQ 组件仍可能把原生登录数据写入其自动选择的其他本机目录。上述登录信息、配置、日志、缓存和备份等相关文件均只保留在本机，不上传到仓库或问题反馈。
-
-近期文字记忆在进程内按“机器人 + 群 + 用户”隔离，重启清空，有一小时清理、256 个会话和每会话 12000 字符上限。图片请求与文字共享去重、冷却、会话锁和最多 3 个并发请求限制。
-
-`.env`、日志、缓存、聊天数据和密钥已被 Git 忽略。发布前运行隐私检查；它是规则扫描，不能保证识别所有私密信息。若真实凭证曾进入提交历史或被公开，应到对应服务重置，仅修改当前文件无法撤回旧副本。
-
-## 离线检查
+Python 环境可通过 `QQBOT_VENV` 改到其他位置；安装脚本也支持用 `QQBOT_PYTHON` 指定基础解释器。例如：
 
 ```powershell
-$python = 'D:\IDE\python-envs\qqbotai\Scripts\python.exe'
+$env:QQBOT_VENV = 'D:\IDE\python-envs\qqbotai'
+# 需要指定解释器时：$env:QQBOT_PYTHON = 'D:\IDE\Python\python.exe'
+```
+
+这些环境变量应在运行项目脚本的每个终端中保持一致。
+
+### 2. 启动 AI 并填写配置
+
+在项目根目录运行：
+
+```powershell
+.\start.ps1
+```
+
+首次运行会安装 Python 依赖；缺少启动配置时进入本机配置向导。也可先运行 `setup.ps1` 安装，再运行 `configure.ps1` 配置。
+
+向导中填写允许回复的**真实群号**，多个用英文逗号分隔；机器人 QQ 号可选。OneBot Token 首次留空会自动生成。文本模型可以暂不填 Key，先用 `/ping` 验证 QQ 收发；视觉、找图和搜索均可稍后添加。
+
+配置保存在项目根目录的 `.env`。QQ 号、群号、Token 和 Key 输入时**不显示字符或星号**，粘贴后按回车即可；已有值通常可直接回车保留。保存后保留 AI 服务窗口，等待 NapCat 连接。
+
+### 3. 启动 NapCat 并登录
+
+另开一个终端，在项目根目录运行：
+
+```powershell
+.\start-napcat.ps1
+```
+
+按本机终端或 WebUI 提示登录 QQ。脚本会同步 OneBot 连接地址与 Token，并更新已有账号的连接配置：
+
+- 默认反向 WebSocket：`ws://127.0.0.1:8082/onebot/v11/`，使用数组消息格式。
+- WebUI 默认端口：`6099`，入口以本机终端提示为准；WebUI Token 与 OneBot Token 分开。
+- Python 监听地址和 WebUI 均绑定 `127.0.0.1`，两个服务在同一台电脑运行。
+
+保留两个服务窗口。日常启动仍依次运行 `start.ps1` 和 `start-napcat.ps1`；停止时在对应窗口按 `Ctrl+C`。不要重复运行同一 NapCat 运行目录。
+
+### 4. 验证群收发
+
+用另一个 QQ 在允许的群中，从成员列表选中并 @机器人，发送 `/ping`；收到“我在线”后，再单独 @它查看菜单。
+
+本机可查询状态：
+
+```powershell
+$python = Join-Path $(if ($env:QQBOT_VENV) { $env:QQBOT_VENV } else { 'D:\IDE\python-envs\qqbotai' }) 'Scripts\python.exe'
+& $python bot.py --status
+& $python bot.py --diagnose
+```
+
+`--status` 区分 AI 未运行、等待 QQ 连接和已连接；`--diagnose` 额外显示匿名事件计数，不显示消息、账号或群号。连接成功仍需群内 `/ping` 才能确认实际收发。
+
+## 配置模型与可选功能
+
+运行 `configure.ps1` 可重新填写连接、名字、文本模型、视觉模型及 SerpApi。也可参考 [`.env.example`](.env.example) 编辑本机 `.env`；系统环境变量优先于文件。
+
+修改模型或服务凭证后重启 AI。修改 OneBot Token 或端口时，先停止两个服务，再启动 AI 和 NapCat，使两端配置一致。仅改允许群号可运行 `configure.ps1 -Groups`，保存后重启 AI。
+
+### 文本模型
+
+`LLM_PROVIDER` 选择协议，`LLM_BASE_URL` 填 API 根地址，`LLM_MODEL` 填账号实际可调用的模型 ID，`LLM_API_KEY` 填该服务的 Key。
+
+| `LLM_PROVIDER` | 协议与地址规则 |
+| --- | --- |
+| `deepseek` | DeepSeek Chat Completions，项目提供默认地址与模型 |
+| `compatible` | 兼容 Chat Completions 的服务，如千问兼容接口；自行填写地址与模型，程序追加 `/chat/completions` |
+| `openai` | OpenAI Responses，程序追加 `/responses` |
+| `anthropic` | Claude Messages，使用 `/v1/messages` |
+| `gemini` | Gemini GenerateContent |
+| `ollama` | 本机 Ollama 的 Chat Completions，默认 `http://localhost:11434/v1`，Key 可留空 |
+
+兼容接口的根地址通常包含服务商要求的 `/v1`；以该服务文档为准。拥有 API Key 的平台还须提供上述协议之一，模型 ID、可用功能、费用和账号权限由服务商决定。
+
+名字使用 `BOT_NAME`，人设在 `app/persona.py`。其他常用字段：
+
+| 字段 | 含义 |
+| --- | --- |
+| `LLM_MAX_TOKENS` | 单次输出预算，默认 2048 |
+| `LLM_TOKEN_PARAM` | compatible 接口使用 `max_tokens` 或 `max_completion_tokens` |
+| `LLM_EXTRA_BODY` | 模型额外参数 JSON；不能覆盖消息、模型和输出上限等核心字段 |
+| `HISTORY_TURNS` | 近期完整文字对话轮数，默认 6，可设 0—10 |
+| `COOLDOWN_SECONDS` | 同一会话的调用间隔，默认 3 秒 |
+| `ONEBOT_ACCESS_TOKEN` | 与 NapCat 一致的 Token，至少 16 位 |
+| `NAPCAT_ALLOWED_GROUPS` | 允许回复的数字群号，以英文逗号分隔；为空不回复任何群 |
+| `NAPCAT_SELF_ID` | 可选，仅处理指定登录 QQ 的事件 |
+| `NAPCAT_PORT` | 本机 AI 端口，默认 8082 |
+
+### 视觉与搜索
+
+各服务独立配置，未配置时提示管理员，不调用对应服务。单项向导只改对应 Key；回车保留已有值，输入 `-` 清空禁用。密钥不要发到群或提交仓库。
+
+| 功能 | 配置方式 | 说明 |
+| --- | --- | --- |
+| 看图分析 | `configure.ps1` 中选择配置视觉模型，填写视觉协议、地址、模型和密钥等 `VISION_*` 字段 | 支持 compatible、openai、anthropic、gemini、ollama；所选模型须支持图片输入，不自动沿用文本模型 Key |
+| 网页检索 | `configure.ps1 -Tavily`，填写 `TAVILY_API_KEY` | 在 [Tavily 控制台](https://app.tavily.com/) 获取凭证 |
+| 插画溯源 | `configure.ps1 -SauceNao`，填写 `SAUCENAO_API_KEY` | 在 [SauceNAO Search API 页面](https://saucenao.com/user.php?page=search-api) 获取凭证 |
+| 摄影关键词找图 | `configure.ps1 -Pexels`，填写 `PEXELS_API_KEY` | 在 [Pexels API 页面](https://www.pexels.com/api/new/) 申请凭证 |
+| 通用以图搜图 | `configure.ps1` 中配置 `SERPAPI_API_KEY` | 使用 [SerpApi Google Lens](https://serpapi.com/google-lens-api) 与 Image API |
+
+`/搜索` 只在明确命令下检索网页摘要，再交当前文本模型总结并附来源；总结失败仍展示摘要和链接。它使用搜索额度和模型 Token，不会自动打开结果网页，也不替代图片溯源。
+
+`/查出处` 优先使用 SauceNAO，返回最多 3 个相似度不低于 70% 的可展示候选；没有 SauceNAO Key 时才使用 SerpApi 返回来源或相似网页。两者都配置时不会自动上传到第二家服务重试。未收录、裁剪或改动较大的图片可能找不到；相似度和页面署名不代表原作或作者认证。结果只发文字和链接，不下载、转发候选缩略图。
+
+`/找图` 使用 Pexels 摄影图库，每次最多一张图并保留摄影师与来源链接；图片下载失败时提供来源信息。它按关键词检索，不上传群图片，不调用语言模型。
+
+## 隐私与数据流
+
+| 功能 | 发送给外部服务的数据 |
+| --- | --- |
+| 文字聊天 | 人设、本次问题和该用户在当前群的近期文字对话 → 所配置文本模型 |
+| 看图分析 | 本次问题和去元数据、压缩后的图片 → 所配置视觉服务 |
+| 网页检索 | 本次搜索问题 → Tavily；问题及有限的检索摘要 → 当前文本模型 |
+| 以图查出处 | 压缩图片 → SauceNAO，或未配 SauceNAO 时的 SerpApi |
+| 摄影找图 | 本次关键词 → Pexels，并从 Pexels 图片域名下载结果 |
+
+外部请求不附带 QQ 号、群号或原始 QQ 签名图片地址。用户自己写进问题或图片里的个人信息仍属于上传内容，请让群成员知晓用途。云服务如何保留数据由各平台决定；OpenAI Responses 请求设置 `store=false`，本项目不能保证第三方删除副本。
+
+近期文字记忆仅在内存中按“机器人、群、用户”隔离，重启清空；会话空闲超过一小时后清理，最多 256 个会话、每会话 12000 字符。图片、联网检索与找图结果不写入后续聊天记忆或磁盘。Pexels 的少量图片元数据可在内存缓存最多 24 小时。
+
+Python 日志仅输出固定诊断摘要，不打印原始事件、凭证、API 响应或异常堆栈。NapCat 自身的终端、WebUI、配置、日志、缓存及 QQ 登录数据可能含隐私，均应保留在本机；QQ 组件也可能使用其默认本机数据目录。不要分享登录二维码或管理入口 Token。
+
+`.env`、运行数据、日志、缓存、虚拟环境和编辑器配置由 Git 忽略。发布前还须检查暂存区；规则扫描不能识别所有个人信息。若凭证曾被提交或公开，应到对应服务重置，删除当前文件不能撤回历史副本。
+
+## 常见问题
+
+| 现象 | 检查顺序 |
+| --- | --- |
+| NapCat 提示 `ECONNREFUSED 127.0.0.1:8082` | 先启动 AI，确认窗口未退出；再核对端口。修改端口后重启两端 |
+| 显示已连接，但群里不回复 | 用另一个 QQ；核对真实群号；从成员列表明确 @；发送 `/ping`，再看 `--diagnose` |
+| 菜单提示未配置 | 在本机配置对应独立凭证，保存后重启 AI |
+| 菜单已配置，但功能鉴权失败 | 检查该服务 Key、接口协议、模型权限、额度及网络；菜单不做实时接口验证 |
+| 识图失败或收不到图片 | 把一张普通图片与命令放在同一条消息，检查格式、大小与模型的图片输入能力 |
+| 查不到出处 | 换较完整、清晰的图；检索范围取决于服务索引，候选链接也需自行核验 |
+
+排查时提供运行的命令、固定错误提示和脱敏复现步骤即可；不要附 `.env`、登录数据、原始事件或 API 响应。参与开发见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+## 开发与检查
+
+安装运行依赖后，再安装开发依赖并在项目根目录运行：
+
+```powershell
+$python = Join-Path $(if ($env:QQBOT_VENV) { $env:QQBOT_VENV } else { 'D:\IDE\python-envs\qqbotai' }) 'Scripts\python.exe'
+& $python -m pip install -r requirements-dev.txt
+& $python -m black --check .
 & $python -m pip check
 & $python -m unittest discover -s tests -v
 & $python scripts/check_privacy.py
 .\start.ps1 -Check
 ```
 
-测试使用模拟 QQ、模型和搜索响应，不使用真实密钥、不发送群消息，也不消费 API 额度。GitHub Actions 覆盖 Windows / Ubuntu 与 Python 3.11 / 3.14；实际状态以本次提交运行结果为准。
+`python -m black .` 可统一 Python 格式。离线测试使用模拟 QQ、模型与搜索响应，不发送群消息或消耗真实 API 额度。`start.ps1 -Check` / `python bot.py --check` 只检查配置读取和插件装配，不代表 QQ 已连接；`configure.ps1 -Check` / `python configure.py --check` 另会要求启动所需的 Token 和允许群号完整。
 
-Linux / macOS 可自行创建虚拟环境并安装 `requirements.lock`，然后运行 `python configure.py`、`python bot.py --check`、`python bot.py`。不需要使用 Windows 的 D 盘路径。
+暂存公开源码后，运行 `python scripts/check_privacy.py --staged` 检查实际待提交内容。仓库的 GitHub Actions 配置覆盖 Windows / Ubuntu 与 Python 3.11 / 3.14，具体结果以对应提交的工作流为准。
 
-## 代码入口
+Linux / macOS 可自行创建虚拟环境，安装 `requirements.lock` 后运行 `python configure.py`、`python bot.py`。NapCat 需另行安装，配置到同机 OneBot 反向 WebSocket，Token 与本项目一致、消息格式为数组；Windows 的 D 盘目录不适用。
 
-- `bot.py`：OneBot 反向 WebSocket、插件与模型装配。
-- `start.ps1`：启动前检查配置，必要时进入向导，再启动 AI；`-Check` 只做离线装配检查。
-- `start-napcat.ps1`：启动本机 NapCat 便携程序，使用独立运行目录登录个人 QQ。
-- `prepare_napcat.py` / `app/napcat.py`：同步本机 OneBot 连接配置、Token、消息格式及 WebUI 访问设置。
-- `plugins/qq_chat.py`：群白名单、明确 @ 判断、命令与图片事件路由。
-- `app/chat.py`：去重、并发、冷却与近期文字记忆。
-- `app/images.py`：图片下载验证、去元数据、视觉协议和搜图。
-- `app/pexels.py`：关键词摄影图片搜索、署名、来源链接与图片下载。
-- `app/websearch.py`：Tavily 网页检索、模型总结及来源链接。
-- `app/saucenao.py`：插画以图匹配、相似度与候选作品页。
-- `app/llm.py`：文本模型协议。
-- `app/config.py` / `configure.py`：配置读取、本机向导与非交互启动配置检查。
-- `app/persona.py`：自定义人设。
-- `scripts/check_privacy.py`：公开文件隐私扫描。
+主要入口：
+
+- `bot.py`：服务装配、启动、状态查询。
+- `plugins/qq_chat.py`：群权限、明确 @ 判断与消息路由。
+- `app/commands.py` / `app/chat.py`：功能菜单、命令别名、限流与近期记忆。
+- `app/llm.py` / `app/images.py`：文本和视觉协议、图片处理。
+- `app/websearch.py` / `app/saucenao.py` / `app/pexels.py`：独立搜索服务。
+- `app/config.py` / `configure.py`：配置读取与本机向导。
+- `prepare_napcat.py` / `app/napcat.py`：本机 NapCat 连接配置同步。
+- `scripts/check_privacy.py`：公开文件与暂存区的隐私规则检查。
 
 ## 许可证
 
-本项目自有代码采用 [MIT](LICENSE)。NapCat 是需独立安装的外部软件，本仓库不包含它的程序或源代码；其使用、修改和再分发受 [NapCat 自身许可](https://github.com/NapNeko/NapCatQQ/blob/main/LICENSE) 约束，并非本项目的 MIT 授权范围。模型服务及 QQ 平台也分别适用各自的条件。
+本项目自有代码采用 [MIT](LICENSE)。NapCat 需独立安装，其使用、修改和再分发受 [NapCat 自身许可证](https://github.com/NapNeko/NapCatQQ/blob/main/LICENSE) 约束，不属于本项目的 MIT 授权范围。QQ、模型和搜索服务分别适用各自的条款。

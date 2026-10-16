@@ -19,17 +19,27 @@ def sample_image():
 
 class ImageTests(unittest.IsolatedAsyncioTestCase):
     def settings(self, provider="compatible"):
-        return Settings(vision_provider=provider, vision_base_url="https://vision.example/v1",
-                        vision_model="test-vision", vision_api_key="test-vision-key",
-                        serpapi_api_key="test-search-key")
+        return Settings(
+            vision_provider=provider,
+            vision_base_url="https://vision.example/v1",
+            vision_model="test-vision",
+            vision_api_key="test-vision-key",
+            serpapi_api_key="test-search-key",
+        )
 
     def test_only_qq_https_image_attachments_are_downloadable(self):
         validate_image_url("https://multimedia.nt.qq.com/download?example=1")
         validate_image_url("https://multimedia.nt.qq.com.cn/download?example=1")
         validate_image_url("https://gchat.qpic.cn/image")
-        for url in ("http://gchat.qpic.cn/a", "https://127.0.0.1/a", "file:///private.jpg",
-                    "https://gchat.qpic.cn.evil.example/a", "https://user:password@gchat.qpic.cn/a",
-                    "https://gchat.qpic.cn:8443/a", "https://example.com/a"):
+        for url in (
+            "http://gchat.qpic.cn/a",
+            "https://127.0.0.1/a",
+            "file:///private.jpg",
+            "https://gchat.qpic.cn.evil.example/a",
+            "https://user:password@gchat.qpic.cn/a",
+            "https://gchat.qpic.cn:8443/a",
+            "https://example.com/a",
+        ):
             with self.subTest(url=url), self.assertRaises(ModelError):
                 validate_image_url(url)
 
@@ -57,17 +67,28 @@ class ImageTests(unittest.IsolatedAsyncioTestCase):
     async def test_all_vision_protocols_send_image_and_parse_text(self):
         for provider in ("compatible", "ollama", "openai", "anthropic", "gemini"):
             requests = []
+
             def respond(request):
                 requests.append(request)
                 payload = {
-                    "openai": {"output": [{"type": "message", "content": [{"type": "output_text", "text": "蓝色方块"}]}]},
+                    "openai": {
+                        "output": [
+                            {
+                                "type": "message",
+                                "content": [{"type": "output_text", "text": "蓝色方块"}],
+                            }
+                        ]
+                    },
                     "anthropic": {"content": [{"type": "text", "text": "蓝色方块"}]},
                     "gemini": {"candidates": [{"content": {"parts": [{"text": "蓝色方块"}]}}]},
                 }.get(provider, {"choices": [{"message": {"content": "蓝色方块"}}]})
                 return httpx.Response(200, json=payload)
+
             async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
                 service = ImageService(self.settings(provider), client)
-                self.assertEqual(await service.analyze(normalize_image(sample_image()), "图片是什么"), "蓝色方块")
+                self.assertEqual(
+                    await service.analyze(normalize_image(sample_image()), "图片是什么"), "蓝色方块"
+                )
             payload = json.loads(requests[0].content)
             serialized = json.dumps(payload)
             self.assertIn("/9j/", serialized)
@@ -77,19 +98,29 @@ class ImageTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_reverse_search_uploads_bytes_filters_results_and_keeps_safe_search(self):
         requests = []
+
         def respond(request):
             requests.append(request)
             if request.url.path == "/image":
-                self.assertIn(b'image.jpg', request.content)
-                self.assertNotIn(b'qpic.cn', request.content)
+                self.assertIn(b"image.jpg", request.content)
+                self.assertNotIn(b"qpic.cn", request.content)
                 return httpx.Response(200, json={"image_id": "test-image-id"})
             self.assertEqual(request.url.params["image_id"], "test-image-id")
             self.assertEqual(request.url.params["safe"], "active")
-            return httpx.Response(200, json={"visual_matches": [
-                {"title": "坏链接", "link": "javascript:example"},
-                {"title": "不应展示凭证", "link": "https://example.com/?token=test-private"},
-                {"title": "蓝色方块", "link": "https://example.com/source"},
-            ]})
+            return httpx.Response(
+                200,
+                json={
+                    "visual_matches": [
+                        {"title": "坏链接", "link": "javascript:example"},
+                        {
+                            "title": "不应展示凭证",
+                            "link": "https://example.com/?token=test-private",
+                        },
+                        {"title": "蓝色方块", "link": "https://example.com/source"},
+                    ]
+                },
+            )
+
         async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
             service = ImageService(self.settings(), client)
             answer = await service.search(normalize_image(sample_image(), for_search=True))
@@ -109,15 +140,22 @@ class ImageTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_redirect_oversize_and_service_errors_are_safe(self):
         for status, body in ((302, b""), (200, b"x" * (MAX_DOWNLOAD + 1))):
+
             def respond(request):
-                return httpx.Response(status, content=body, headers={"Location": "http://127.0.0.1/private"})
+                return httpx.Response(
+                    status, content=body, headers={"Location": "http://127.0.0.1/private"}
+                )
+
             async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
                 service = ImageService(self.settings(), client)
                 with self.assertRaises(ModelError):
                     await service.download("https://gchat.qpic.cn/a")
         for status in (401, 402, 429, 500):
-            async with httpx.AsyncClient(transport=httpx.MockTransport(
-                    lambda request: httpx.Response(status, json={"error": "test-private-response"}))) as client:
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(
+                    lambda request: httpx.Response(status, json={"error": "test-private-response"})
+                )
+            ) as client:
                 service = ImageService(self.settings(), client)
                 with self.assertRaises(ModelError) as error:
                     await service.analyze(normalize_image(sample_image()), "test")

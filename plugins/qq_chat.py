@@ -3,17 +3,18 @@ from nonebot.adapters.onebot.v11 import Bot, Event, GroupMessageEvent, Message, 
 from nonebot.message import event_preprocessor
 
 from app.chat import ChatService
+from app.commands import REVERSE_COMMANDS, WEB_COMMANDS
 from app.diagnostics import diagnostics
 from app.images import ImageService
 from app.pexels import PexelsService, PhotoResult
 from app.websearch import WebSearchService
 
-REVERSE_COMMANDS = ("/搜图", "/查出处", "/出处")
 
 async def explicitly_mentioned(bot: Bot, event: GroupMessageEvent) -> bool:
     # 用原始消息中的 @ 段判断，避免昵称、引用或 @全体成员触发。
-    return any(s.type == "at" and str(s.data.get("qq")) == str(bot.self_id)
-               for s in event.original_message)
+    return any(
+        s.type == "at" and str(s.data.get("qq")) == str(bot.self_id) for s in event.original_message
+    )
 
 
 chat = on_type(GroupMessageEvent, rule=explicitly_mentioned, priority=10, block=True)
@@ -98,7 +99,7 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent) -> None:
         command = parts[0] if parts else ""
         question = parts[1] if len(parts) > 1 else ""
         operation = None
-        if command in ("/搜索", "/联网", "/search"):
+        if command in WEB_COMMANDS:
             if not question or picture_segments:
                 await send_reply("联网搜索请发送：@我 /搜索 你想查的问题，无需附图。")
                 return
@@ -112,7 +113,9 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent) -> None:
         # 关键词找图和图片溯源分别路由，避免把群图片交给摄影图库。
         elif command == "/找图" or (command == "/搜图" and not picture_segments):
             if picture_segments or not question:
-                await send_reply("关键词找图请发送：@我 /找图 猫。不用附图；查图片出处可用 /搜图 加一张图片。")
+                await send_reply(
+                    "关键词找图请发送：@我 /找图 猫。不用附图；查图片出处可用 /搜图 加一张图片。"
+                )
                 return
             if pexels is None:
                 await send_reply("关键词找图尚未初始化，请重启机器人。")
@@ -133,12 +136,15 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent) -> None:
             segment = picture_segments[0]
             mode = "search" if command in REVERSE_COMMANDS else "analyze"
             prompt = question if command == "/识图" else text
+
             async def operation() -> str:
                 return await images.process(segment.data.get("url", ""), mode, prompt)
+
         await service.handle(
             key,
             str(event.message_id),
-            text or "/识图",
+            # 仅附图的消息默认识图；纯 @ 保留为空，由会话服务显示菜单。
+            text or ("/识图" if picture_segments else ""),
             send_reply,
             operation=operation,
         )

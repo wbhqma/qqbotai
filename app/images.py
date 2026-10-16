@@ -27,8 +27,14 @@ def validate_image_url(url: str) -> None:
         parsed = urlsplit(url)
         host = (parsed.hostname or "").lower()
         allowed = host in QQ_IMAGE_HOSTS or host == "qpic.cn" or host.endswith(".qpic.cn")
-        valid = (parsed.scheme == "https" and allowed and not parsed.username
-                 and not parsed.password and parsed.port in (None, 443) and not parsed.fragment)
+        valid = (
+            parsed.scheme == "https"
+            and allowed
+            and not parsed.username
+            and not parsed.password
+            and parsed.port in (None, 443)
+            and not parsed.fragment
+        )
     except (TypeError, ValueError):
         valid = False
     if not valid:
@@ -57,22 +63,38 @@ def normalize_image(data: bytes, *, for_search: bool = False) -> bytes:
                     if len(result) <= (490_000 if for_search else 2_000_000):
                         return result
                 raise ModelError("图片压缩后仍过大，请换一张较小的图片。")
-    except (OSError, ValueError, UnidentifiedImageError, Image.DecompressionBombError,
-            Image.DecompressionBombWarning):
+    except (
+        OSError,
+        ValueError,
+        UnidentifiedImageError,
+        Image.DecompressionBombError,
+        Image.DecompressionBombWarning,
+    ):
         raise ModelError("图片无法解码或尺寸过大，请换一张普通图片。") from None
 
 
 class ImageService:
     def __init__(self, settings: Settings, client: httpx.AsyncClient | None = None):
         self.settings = settings
-        self.client = client or httpx.AsyncClient(timeout=httpx.Timeout(45, connect=10), follow_redirects=False)
+        self.client = client or httpx.AsyncClient(
+            timeout=httpx.Timeout(45, connect=10), follow_redirects=False
+        )
         self.owns_client = client is None
         config = settings.resolve_vision()
-        self.vision = None if config is None else LLMClient(Settings(
-            llm_provider=config.provider, llm_base_url=config.base_url,
-            llm_model=config.model, llm_api_key=config.api_key,
-            llm_max_tokens=config.max_tokens,
-        ), self.client)
+        self.vision = (
+            None
+            if config is None
+            else LLMClient(
+                Settings(
+                    llm_provider=config.provider,
+                    llm_base_url=config.base_url,
+                    llm_model=config.model,
+                    llm_api_key=config.api_key,
+                    llm_max_tokens=config.max_tokens,
+                ),
+                self.client,
+            )
+        )
 
     async def close(self) -> None:
         if self.owns_client:
@@ -122,30 +144,71 @@ class ImageService:
         headers = {"Authorization": "Bearer " + config.api_key} if config.api_key else {}
         payload = {"model": config.model, "stream": False}
         if config.provider == "openai":
-            payload.update(instructions=VISION_INSTRUCTION, store=False, max_output_tokens=config.max_tokens,
-                           input=[{"role": "user", "content": [
-                               {"type": "input_text", "text": question},
-                               {"type": "input_image", "image_url": data_url},
-                           ]}])
+            payload.update(
+                instructions=VISION_INSTRUCTION,
+                store=False,
+                max_output_tokens=config.max_tokens,
+                input=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "input_text", "text": question},
+                            {"type": "input_image", "image_url": data_url},
+                        ],
+                    }
+                ],
+            )
         elif config.provider == "anthropic":
             headers = {"x-api-key": config.api_key, "anthropic-version": "2023-06-01"}
-            payload.update(system=VISION_INSTRUCTION, max_tokens=config.max_tokens,
-                           messages=[{"role": "user", "content": [
-                               {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": encoded}},
-                               {"type": "text", "text": question},
-                           ]}])
+            payload.update(
+                system=VISION_INSTRUCTION,
+                max_tokens=config.max_tokens,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": encoded,
+                                },
+                            },
+                            {"type": "text", "text": question},
+                        ],
+                    }
+                ],
+            )
         elif config.provider == "gemini":
             headers = {"x-goog-api-key": config.api_key}
-            payload = {"systemInstruction": {"parts": [{"text": VISION_INSTRUCTION}]},
-                       "contents": [{"role": "user", "parts": [
-                           {"text": question}, {"inlineData": {"mimeType": "image/jpeg", "data": encoded}},
-                       ]}], "generationConfig": {"maxOutputTokens": config.max_tokens}}
+            payload = {
+                "systemInstruction": {"parts": [{"text": VISION_INSTRUCTION}]},
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [
+                            {"text": question},
+                            {"inlineData": {"mimeType": "image/jpeg", "data": encoded}},
+                        ],
+                    }
+                ],
+                "generationConfig": {"maxOutputTokens": config.max_tokens},
+            }
         else:
-            payload.update(max_tokens=config.max_tokens, messages=[
-                {"role": "system", "content": VISION_INSTRUCTION},
-                {"role": "user", "content": [{"type": "text", "text": question},
-                    {"type": "image_url", "image_url": {"url": data_url}}]},
-            ])
+            payload.update(
+                max_tokens=config.max_tokens,
+                messages=[
+                    {"role": "system", "content": VISION_INSTRUCTION},
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": question},
+                            {"type": "image_url", "image_url": {"url": data_url}},
+                        ],
+                    },
+                ],
+            )
         data = await self._json("POST", config.endpoint, headers=headers, json=payload)
         try:
             answer = self.vision._answer(data)
@@ -153,23 +216,40 @@ class ImageService:
                 raise ValueError
             return answer.strip()[:1200]
         except (KeyError, IndexError, TypeError, ValueError, AttributeError):
-            raise ModelError("视觉服务未返回分析文本；请检查模型是否支持图片，或服务是否拒绝了本次输入。") from None
+            raise ModelError(
+                "视觉服务未返回分析文本；请检查模型是否支持图片，或服务是否拒绝了本次输入。"
+            ) from None
 
     async def search(self, picture: bytes) -> str:
         if self.settings.saucenao_api_key:
             return await SauceNaoService(self.settings, self.client).search(picture)
         key = self.settings.serpapi_api_key
         if not key:
-            raise ModelError("图片溯源尚未配置，请管理员在本机运行 configure.ps1 -SauceNao 配置插画溯源。")
-        upload = await self._json("POST", "https://serpapi.com/image", data={"api_key": key},
-                                  files={"image": ("image.jpg", picture, "image/jpeg")})
+            raise ModelError(
+                "图片溯源尚未配置，请管理员在本机运行 configure.ps1 -SauceNao 配置插画溯源。"
+            )
+        upload = await self._json(
+            "POST",
+            "https://serpapi.com/image",
+            data={"api_key": key},
+            files={"image": ("image.jpg", picture, "image/jpeg")},
+        )
         image_id = upload.get("image_id")
         if not isinstance(image_id, str) or not image_id:
             raise ModelError("搜图服务未接收图片，请稍后再试。")
-        data = await self._json("GET", "https://serpapi.com/search.json", params={
-            "api_key": key, "engine": "google_lens", "image_id": image_id,
-            "type": "visual_matches", "safe": "active", "hl": "zh-cn", "no_cache": "true",
-        })
+        data = await self._json(
+            "GET",
+            "https://serpapi.com/search.json",
+            params={
+                "api_key": key,
+                "engine": "google_lens",
+                "image_id": image_id,
+                "type": "visual_matches",
+                "safe": "active",
+                "hl": "zh-cn",
+                "no_cache": "true",
+            },
+        )
         matches = data.get("visual_matches", [])
         if not isinstance(matches, list):
             raise ModelError("搜图服务返回格式异常，请稍后再试。")
@@ -183,10 +263,18 @@ class ImageService:
                 continue
             try:
                 parsed = urlsplit(link)
-                valid = (parsed.scheme == "https" and parsed.hostname and not parsed.username
-                         and not parsed.password and len(link) <= 240
-                         and not any(ord(c) < 32 for c in link)
-                         and not any(name in parsed.query.lower() for name in ("token=", "key=", "secret=", "rkey=")))
+                valid = (
+                    parsed.scheme == "https"
+                    and parsed.hostname
+                    and not parsed.username
+                    and not parsed.password
+                    and len(link) <= 240
+                    and not any(ord(c) < 32 for c in link)
+                    and not any(
+                        name in parsed.query.lower()
+                        for name in ("token=", "key=", "secret=", "rkey=")
+                    )
+                )
             except ValueError:
                 valid = False
             if not valid or link in seen:
@@ -196,18 +284,31 @@ class ImageService:
             lines.append(f"{len(lines) + 1}. {title}\n{link}")
             if len(lines) == 3:
                 break
-        return ("来源/相似网页（相似不代表原始出处或作者）：\n" + "\n".join(lines)
-                if lines else "没有找到可展示的来源或相似网页，可以换一张更清晰的图片。")
+        return (
+            "来源/相似网页（相似不代表原始出处或作者）：\n" + "\n".join(lines)
+            if lines
+            else "没有找到可展示的来源或相似网页，可以换一张更清晰的图片。"
+        )
 
     async def process(self, url: str, mode: str, question: str = "") -> str:
         if mode not in ("search", "analyze"):
             raise ModelError("不支持的图片操作。")
         # 未配置时不下载、更不上传图片。
-        if mode == "search" and not (self.settings.saucenao_api_key or self.settings.serpapi_api_key):
-            raise ModelError("图片溯源尚未配置，请管理员在本机运行 configure.ps1 -SauceNao 配置插画溯源。")
-        if mode == "analyze" and (self.vision is None or (
-                not self.vision.config.api_key and self.vision.config.provider != "ollama")):
+        if mode == "search" and not (
+            self.settings.saucenao_api_key or self.settings.serpapi_api_key
+        ):
+            raise ModelError(
+                "图片溯源尚未配置，请管理员在本机运行 configure.ps1 -SauceNao 配置插画溯源。"
+            )
+        if mode == "analyze" and (
+            self.vision is None
+            or (not self.vision.config.api_key and self.vision.config.provider != "ollama")
+        ):
             raise ModelError("识图尚未配置，请管理员在本机填写 VISION 接口、模型和密钥。")
         raw = await self.download(url)
         picture = await asyncio.to_thread(normalize_image, raw, for_search=mode == "search")
-        return await self.search(picture) if mode == "search" else await self.analyze(picture, question)
+        return (
+            await self.search(picture)
+            if mode == "search"
+            else await self.analyze(picture, question)
+        )

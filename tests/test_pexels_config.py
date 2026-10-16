@@ -23,7 +23,7 @@ class PexelsConfigTests(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
         self.original = (
-            '# keep comments and unrelated formatting\n'
+            "# keep comments and unrelated formatting\n"
             'LLM_API_KEY="test-model-key"\n'
             'VISION_API_KEY="test-vision-key"\n'
             'SERPAPI_API_KEY="test-search-key"\n'
@@ -33,13 +33,23 @@ class PexelsConfigTests(unittest.TestCase):
 
     def run_wizard(self, entered):
         output = io.StringIO()
-        with patch("configure.ROOT", self.root), patch("configure.getpass", return_value=entered) as prompt, \
-                patch("builtins.input", side_effect=AssertionError("Unexpected visible prompt")), \
-                contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+        with (
+            patch("configure.ROOT", self.root),
+            patch("configure.getpass", return_value=entered) as prompt,
+            patch("builtins.input", side_effect=AssertionError("Unexpected visible prompt")),
+            contextlib.redirect_stdout(output),
+            contextlib.redirect_stderr(output),
+        ):
             result = configure_pexels()
         self.assertIn("输入不显示字符", prompt.call_args.args[0])
         visible = output.getvalue() + prompt.call_args.args[0]
-        for value in ("test-old-key", "test-pexels-key", "test-model-key", "test-search-key", "test-vision-key"):
+        for value in (
+            "test-old-key",
+            "test-pexels-key",
+            "test-model-key",
+            "test-search-key",
+            "test-vision-key",
+        ):
             self.assertNotIn(value, visible)
         return result, visible
 
@@ -73,7 +83,9 @@ class PexelsConfigTests(unittest.TestCase):
                 result, visible = self.run_wizard(" test-pexels-key ")
                 self.assertEqual(result, 0)
                 self.assertIn("https://www.pexels.com/api/new/", visible)
-                expected = original.replace('PEXELS_API_KEY="test-old-key"', "PEXELS_API_KEY='test-pexels-key'")
+                expected = original.replace(
+                    'PEXELS_API_KEY="test-old-key"', "PEXELS_API_KEY='test-pexels-key'"
+                )
                 self.assertEqual(self.path.read_bytes(), expected.encode("utf-8"))
                 self.assertEqual(sorted(p.name for p in self.root.iterdir()), [".env"])
 
@@ -127,9 +139,11 @@ class PexelsConfigTests(unittest.TestCase):
         self.assertEqual(sorted(p.name for p in self.root.iterdir()), [".env"])
 
     def test_cli_routes_to_independent_pexels_wizard(self):
-        with patch("configure.configure_pexels", return_value=7) as wizard, \
-                patch("configure.configure", side_effect=AssertionError("Full wizard called")), \
-                patch("configure.configure_groups", side_effect=AssertionError("Group wizard called")):
+        with (
+            patch("configure.configure_pexels", return_value=7) as wizard,
+            patch("configure.configure", side_effect=AssertionError("Full wizard called")),
+            patch("configure.configure_groups", side_effect=AssertionError("Group wizard called")),
+        ):
             self.assertEqual(main(["--pexels"]), 7)
         wizard.assert_called_once_with()
 

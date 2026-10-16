@@ -17,14 +17,29 @@ LLM_DEFAULTS = {
     "anthropic": ("https://api.anthropic.com/v1", ""),
     "gemini": ("https://generativelanguage.googleapis.com/v1beta", ""),
 }
-DEEPSEEK_URLS = frozenset({
-    "https://api.deepseek.com", "https://api.deepseek.com/v1",
-    "https://api.deepseek.com/chat/completions", "https://api.deepseek.com/v1/chat/completions",
-})
-RESERVED_MODEL_FIELDS = frozenset({
-    "model", "messages", "input", "instructions", "system", "contents",
-    "stream", "store", "max_tokens", "max_completion_tokens", "max_output_tokens",
-})
+DEEPSEEK_URLS = frozenset(
+    {
+        "https://api.deepseek.com",
+        "https://api.deepseek.com/v1",
+        "https://api.deepseek.com/chat/completions",
+        "https://api.deepseek.com/v1/chat/completions",
+    }
+)
+RESERVED_MODEL_FIELDS = frozenset(
+    {
+        "model",
+        "messages",
+        "input",
+        "instructions",
+        "system",
+        "contents",
+        "stream",
+        "store",
+        "max_tokens",
+        "max_completion_tokens",
+        "max_output_tokens",
+    }
+)
 
 
 def napcat_connection(values: Mapping[str, str]) -> tuple[str, int]:
@@ -59,7 +74,9 @@ class ModelConfig:
         if self.provider == "anthropic":
             if self.base_url.endswith("/messages"):
                 return self.base_url
-            return self.base_url + ("/messages" if self.base_url.endswith("/v1") else "/v1/messages")
+            return self.base_url + (
+                "/messages" if self.base_url.endswith("/v1") else "/v1/messages"
+            )
         suffix = "/responses" if self.provider == "openai" else "/chat/completions"
         if self.base_url.endswith(suffix):
             return self.base_url
@@ -114,7 +131,9 @@ class Settings:
             deepseek_model=os.getenv("DEEPSEEK_MODEL", "deepseek-flash").strip(),
             bot_name=os.getenv("BOT_NAME", "").strip() or DEFAULT_BOT_NAME,
             allowed_groups=frozenset(
-                item.strip() for item in os.getenv("NAPCAT_ALLOWED_GROUPS", "").split(",") if item.strip()
+                item.strip()
+                for item in os.getenv("NAPCAT_ALLOWED_GROUPS", "").split(",")
+                if item.strip()
             ),
             history_turns=turns,
             cooldown_seconds=cooldown,
@@ -147,30 +166,46 @@ class Settings:
         if self.vision_provider not in ("compatible", "openai", "anthropic", "gemini", "ollama"):
             raise ValueError("请选择支持图片输入的视觉接口类型。")
         return Settings(
-            llm_provider=self.vision_provider, llm_base_url=self.vision_base_url,
-            llm_model=self.vision_model, llm_api_key=self.vision_api_key,
+            llm_provider=self.vision_provider,
+            llm_base_url=self.vision_base_url,
+            llm_model=self.vision_model,
+            llm_api_key=self.vision_api_key,
             llm_max_tokens=self.llm_max_tokens,
         ).resolve_llm()
 
     def validate_napcat(self) -> None:
         if len(self.onebot_access_token) < 16:
-            raise ValueError("请在本机配置至少 16 位的 ONEBOT_ACCESS_TOKEN，并在 NapCat 填相同 Token。")
-        if not self.allowed_groups or any(not value.isascii() or not value.isdigit() for value in self.allowed_groups):
+            raise ValueError(
+                "请在本机配置至少 16 位的 ONEBOT_ACCESS_TOKEN，并在 NapCat 填相同 Token。"
+            )
+        if not self.allowed_groups or any(
+            not value.isascii() or not value.isdigit() for value in self.allowed_groups
+        ):
             raise ValueError("NAPCAT_ALLOWED_GROUPS 须填写允许使用的真实 QQ 群号。")
-        if self.napcat_self_id and (not self.napcat_self_id.isascii() or not self.napcat_self_id.isdigit()):
+        if self.napcat_self_id and (
+            not self.napcat_self_id.isascii() or not self.napcat_self_id.isdigit()
+        ):
             raise ValueError("NAPCAT_SELF_ID 须为数字 QQ 号。")
 
     def resolve_llm(self) -> ModelConfig:
         provider = self.llm_provider.strip().lower()
         if provider not in LLM_DEFAULTS:
-            raise ValueError("LLM_PROVIDER 须为 deepseek、compatible、ollama、openai、anthropic 或 gemini。")
+            raise ValueError(
+                "LLM_PROVIDER 须为 deepseek、compatible、ollama、openai、anthropic 或 gemini。"
+            )
         if not 16 <= self.llm_max_tokens <= 32768:
             raise ValueError("LLM_MAX_TOKENS 须为 16—32768。")
         if self.llm_token_param not in ("max_tokens", "max_completion_tokens"):
             raise ValueError("LLM_TOKEN_PARAM 须为 max_tokens 或 max_completion_tokens。")
-        if not isinstance(self.llm_extra_body, dict) or RESERVED_MODEL_FIELDS.intersection(self.llm_extra_body):
-            raise ValueError("LLM_EXTRA_BODY 须为对象，且不能覆盖模型、消息、流式开关和输出上限等核心字段。")
-        if "generationConfig" in self.llm_extra_body and not isinstance(self.llm_extra_body["generationConfig"], dict):
+        if not isinstance(self.llm_extra_body, dict) or RESERVED_MODEL_FIELDS.intersection(
+            self.llm_extra_body
+        ):
+            raise ValueError(
+                "LLM_EXTRA_BODY 须为对象，且不能覆盖模型、消息、流式开关和输出上限等核心字段。"
+            )
+        if "generationConfig" in self.llm_extra_body and not isinstance(
+            self.llm_extra_body["generationConfig"], dict
+        ):
             raise ValueError("LLM_EXTRA_BODY 中的 generationConfig 须为对象。")
         default_url, default_model = LLM_DEFAULTS[provider]
         base_url = (self.llm_base_url.strip() or default_url).rstrip("/")
@@ -186,16 +221,29 @@ class Settings:
         try:
             parsed = urlsplit(base_url)
             valid_url = (
-                parsed.scheme in ("http", "https") and parsed.hostname
-                and not parsed.username and not parsed.password
-                and not parsed.query and not parsed.fragment
+                parsed.scheme in ("http", "https")
+                and parsed.hostname
+                and not parsed.username
+                and not parsed.password
+                and not parsed.query
+                and not parsed.fragment
             )
             parsed.port  # 触发无效端口检查，不在错误提示里回显地址。
         except ValueError:
             valid_url = False
         if not valid_url:
-            raise ValueError("LLM_BASE_URL 须为有效的 HTTP(S) API 地址，不含账号、密码、查询参数或片段。")
-        return ModelConfig(provider, base_url, model, key, self.llm_max_tokens, dict(self.llm_extra_body), self.llm_token_param)
+            raise ValueError(
+                "LLM_BASE_URL 须为有效的 HTTP(S) API 地址，不含账号、密码、查询参数或片段。"
+            )
+        return ModelConfig(
+            provider,
+            base_url,
+            model,
+            key,
+            self.llm_max_tokens,
+            dict(self.llm_extra_body),
+            self.llm_token_param,
+        )
 
     def status(self) -> dict[str, object]:
         # 自检仅报告是否填写，始终不输出凭证值。
@@ -204,17 +252,25 @@ class Settings:
             "BOT_NAME": "已设置",
             "TRANSPORT": "NapCat / OneBot V11 反向 WebSocket",
             "ONEBOT_ACCESS_TOKEN": "已填写" if self.onebot_access_token else "待填写",
-            "NAPCAT_ALLOWED_GROUPS": "已设置" if self.allowed_groups else "待填写（当前不回复任何群）",
+            "NAPCAT_ALLOWED_GROUPS": (
+                "已设置" if self.allowed_groups else "待填写（当前不回复任何群）"
+            ),
             "NAPCAT_PORT": self.napcat_port,
             "VISION": "已配置" if self.resolve_vision() else "待配置",
             "IMAGE_SEARCH": "已配置" if self.serpapi_api_key else "待配置",
-            "REVERSE_IMAGE_SEARCH": "已配置" if self.saucenao_api_key or self.serpapi_api_key else "待配置",
+            "REVERSE_IMAGE_SEARCH": (
+                "已配置" if self.saucenao_api_key or self.serpapi_api_key else "待配置"
+            ),
             "KEYWORD_IMAGE_SEARCH": "已配置" if self.pexels_api_key else "待配置",
             "WEB_SEARCH": "已配置" if self.tavily_api_key else "待配置",
             "LLM_PROVIDER": model.provider,
             "LLM_BASE_URL": "已设置（地址已隐藏）",
             "LLM_MODEL": "已设置（名称已隐藏）",
             "LLM_MAX_TOKENS": model.max_tokens,
-            "LLM_API_KEY": "已填写" if model.api_key else ("本机 Ollama 可留空" if model.provider == "ollama" else "待填写"),
+            "LLM_API_KEY": (
+                "已填写"
+                if model.api_key
+                else ("本机 Ollama 可留空" if model.provider == "ollama" else "待填写")
+            ),
             "HISTORY_TURNS": self.history_turns,
         }

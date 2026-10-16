@@ -4,14 +4,13 @@ from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
+from app.commands import HELP_COMMANDS, PING_COMMANDS, RESET_COMMANDS, build_help
 from app.config import Settings
 from app.llm import ChatModel, ModelError
 from app.persona import build_system_prompt
 
 SessionKey = tuple[str, str, str]  # 机器人 QQ、群号、发送者 QQ
 Send = Callable[[str], Awaitable[object]]
-
-HELP = "@我 加上问题，就能聊天。\n/ping：检查在线\n/清空：忘记你在本群的对话\n/搜索 问题：联网检索后总结并附来源（也可用 /联网 或 /search）\n/识图 [问题] + 一张图：看图回答\n/查出处 + 一张图：查插画候选作品页、页面署名和相似度（也可用 /搜图）\n/找图 关键词：从 Pexels 找一张摄影图片（也可用 /搜图 关键词）\n/帮助：查看用法\n云端识图/以图搜图会上传本次图片；找图只把关键词发给 Pexels；联网搜索只把本次问题发给 Tavily，再交模型总结。近期记忆重启清空。"
 
 
 @dataclass
@@ -58,8 +57,14 @@ class ChatService:
             self.seen.popitem(last=False)
         return True
 
-    async def handle(self, key: SessionKey, message_id: str, text: str, send: Send,
-                     operation: Callable[[], Awaitable[str]] | None = None) -> bool:
+    async def handle(
+        self,
+        key: SessionKey,
+        message_id: str,
+        text: str,
+        send: Send,
+        operation: Callable[[], Awaitable[str]] | None = None,
+    ) -> bool:
         # 消息 ID 只用于去重；文本相同而 ID 不同的消息仍分别处理。
         event_key = (key[0], key[1], message_id)
         if not self._claim(event_key):
@@ -77,12 +82,17 @@ class ChatService:
                 # QQ 发送失败时允许该事件重新投递；失败回复不写进对话历史。
                 self.seen.pop(event_key, None)
 
-    async def _handle(self, key: SessionKey, text: str, send: Send,
-                      operation: Callable[[], Awaitable[str]] | None = None) -> None:
-        if text in ("/帮助", "/help", "帮助") or not text:
-            await send(HELP)
+    async def _handle(
+        self,
+        key: SessionKey,
+        text: str,
+        send: Send,
+        operation: Callable[[], Awaitable[str]] | None = None,
+    ) -> None:
+        if text in HELP_COMMANDS or not text:
+            await send(build_help(self.settings))
             return
-        if text in ("/ping", "ping"):
+        if text in PING_COMMANDS:
             await send("我在线！可以 @我 聊天，或发 /帮助。")
             return
         if len(text) > 1800:
@@ -90,7 +100,7 @@ class ChatService:
             return
 
         session = self._session(key)
-        if text in ("/清空", "/reset", "清空记忆"):
+        if text in RESET_COMMANDS:
             async with session.lock:
                 session.messages.clear()
                 await send("已经忘记你在这个群里的近期对话，我们重新聊！")
@@ -118,13 +128,15 @@ class ChatService:
                 answer = await operation() if operation else await self.model.complete(messages)
                 await send(answer)
                 if operation:
-                    # 图片、签名 URL 及图片分析结果不写进聊天历史。
+                    # 图片、外部检索及其结果不写进聊天历史。
                     return
                 # 只在真正发回群后记录一轮，避免历史里出现未送达的回答。
-                session.messages.extend([
-                    {"role": "user", "content": text},
-                    {"role": "assistant", "content": answer},
-                ])
+                session.messages.extend(
+                    [
+                        {"role": "user", "content": text},
+                        {"role": "assistant", "content": answer},
+                    ]
+                )
                 while session.messages and (
                     len(session.messages) > self.settings.history_turns * 2
                     or sum(len(m["content"]) for m in session.messages) > 12000

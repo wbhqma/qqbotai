@@ -10,10 +10,11 @@ from app.images import MAX_DOWNLOAD
 from app.llm import ModelError
 from app.pexels import CACHE_LIMIT, PexelsService, PhotoResult
 
-
 KEY = "pexels-local-test-key"
 SOURCE = "https://www.pexels.com/photo/blue-whale-12345/"
-CDN = "https://images.pexels.com/photos/12345/pexels-photo-12345.jpeg?auto=compress&cs=tinysrgb&w=640"
+CDN = (
+    "https://images.pexels.com/photos/12345/pexels-photo-12345.jpeg?auto=compress&cs=tinysrgb&w=640"
+)
 
 
 def picture():
@@ -26,8 +27,16 @@ def picture():
 
 
 def photo(url=CDN, source=SOURCE):
-    return {"photos": [{"alt": "蓝色鲸鱼", "photographer": "Test Photographer",
-                         "url": source, "src": {"large": url}}]}
+    return {
+        "photos": [
+            {
+                "alt": "蓝色鲸鱼",
+                "photographer": "Test Photographer",
+                "url": source,
+                "src": {"large": url},
+            }
+        ]
+    }
 
 
 class PexelsTests(unittest.IsolatedAsyncioTestCase):
@@ -55,9 +64,11 @@ class PexelsTests(unittest.IsolatedAsyncioTestCase):
             return httpx.Response(200, content=picture())
 
         async with httpx.AsyncClient(
-            transport=httpx.MockTransport(respond), auth=("private-client-user", "private-pass"),
+            transport=httpx.MockTransport(respond),
+            auth=("private-client-user", "private-pass"),
             headers={"Authorization": "unrelated-private-key", "X-API-Key": "unrelated-key"},
-            cookies={"private-cookie": "hidden"}, follow_redirects=True,
+            cookies={"private-cookie": "hidden"},
+            follow_redirects=True,
         ) as client:
             service = PexelsService(self.settings(), client)
             result = await service.search("蓝色 鲸鱼")
@@ -89,7 +100,8 @@ class PexelsTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_bad_cdn_urls_fall_back_to_caption_without_fetch(self):
         bad_urls = (
-            "http://images.pexels.com/photos/1/a.jpg", "file:///private.jpg",
+            "http://images.pexels.com/photos/1/a.jpg",
+            "file:///private.jpg",
             "https://images.pexels.com.evil.example/photos/1/a.jpg",
             "https://user:password@images.pexels.com/photos/1/a.jpg",
             "https://images.pexels.com:8443/photos/1/a.jpg",
@@ -121,10 +133,17 @@ class PexelsTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(calls), 1)
 
     async def test_bad_source_urls_are_never_displayed(self):
-        for source in ("https://evil.example/photo/1/", SOURCE + "?token=hidden",
-                       "https://user:password@www.pexels.com/photo/1/", "javascript:alert(1)"):
-            async with httpx.AsyncClient(transport=httpx.MockTransport(
-                    lambda request: httpx.Response(200, json=photo(source=source)))) as client:
+        for source in (
+            "https://evil.example/photo/1/",
+            SOURCE + "?token=hidden",
+            "https://user:password@www.pexels.com/photo/1/",
+            "javascript:alert(1)",
+        ):
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(
+                    lambda request: httpx.Response(200, json=photo(source=source))
+                )
+            ) as client:
                 with self.assertRaises(ModelError) as caught:
                     await PexelsService(self.settings(), client).search("鲸鱼")
                 self.assertNotIn(source, str(caught.exception))
@@ -138,7 +157,9 @@ class PexelsTests(unittest.IsolatedAsyncioTestCase):
                 if request.url.host == "api.pexels.com":
                     return httpx.Response(200, json=photo())
                 if failure == "redirect":
-                    return httpx.Response(302, headers={"Location": "https://private.example/secret"})
+                    return httpx.Response(
+                        302, headers={"Location": "https://private.example/secret"}
+                    )
                 if failure == "length":
                     return httpx.Response(200, headers={"content-length": str(MAX_DOWNLOAD + 1)})
                 if failure == "stream":
@@ -147,7 +168,9 @@ class PexelsTests(unittest.IsolatedAsyncioTestCase):
                     raise httpx.ConnectError("private error with token", request=request)
                 return httpx.Response(200, content=b"private invalid image")
 
-            async with httpx.AsyncClient(transport=httpx.MockTransport(respond), follow_redirects=True) as client:
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(respond), follow_redirects=True
+            ) as client:
                 result = await PexelsService(self.settings(), client).search("鲸鱼")
             with self.subTest(failure=failure):
                 self.assertIsNone(result.image)
@@ -157,26 +180,42 @@ class PexelsTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_api_errors_are_fixed_messages_without_raw_responses(self):
         for status in (301, 401, 403, 429, 500):
-            async with httpx.AsyncClient(transport=httpx.MockTransport(
-                    lambda request: httpx.Response(status, text="private-error-body",
-                                                   headers={"Location": "https://private.example/"})),
-                    follow_redirects=True) as client:
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(
+                    lambda request: httpx.Response(
+                        status,
+                        text="private-error-body",
+                        headers={"Location": "https://private.example/"},
+                    )
+                ),
+                follow_redirects=True,
+            ) as client:
                 with self.assertRaises(ModelError) as caught:
                     await PexelsService(self.settings(), client).search("鲸鱼")
                 self.assertNotIn("private", str(caught.exception))
                 self.assertNotIn(KEY, str(caught.exception))
 
     async def test_invalid_api_json_shapes_and_empty_results_are_safe(self):
-        cases = ([], {}, {"photos": "private-response"}, {"photos": [None]},
-                 {"photos": []}, {"photos": [{"url": SOURCE, "src": []}]})
+        cases = (
+            [],
+            {},
+            {"photos": "private-response"},
+            {"photos": [None]},
+            {"photos": []},
+            {"photos": [{"url": SOURCE, "src": []}]},
+        )
         for payload in cases:
-            async with httpx.AsyncClient(transport=httpx.MockTransport(
-                    lambda request: httpx.Response(200, json=payload))) as client:
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(lambda request: httpx.Response(200, json=payload))
+            ) as client:
                 with self.assertRaises(ModelError) as caught:
                     await PexelsService(self.settings(), client).search("鲸鱼")
                 self.assertNotIn("private-response", str(caught.exception))
-        async with httpx.AsyncClient(transport=httpx.MockTransport(
-                lambda request: httpx.Response(200, content=b"not-json-private"))) as client:
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(200, content=b"not-json-private")
+            )
+        ) as client:
             with self.assertRaises(ModelError) as caught:
                 await PexelsService(self.settings(), client).search("鲸鱼")
             self.assertNotIn("not-json-private", str(caught.exception))
@@ -185,8 +224,10 @@ class PexelsTests(unittest.IsolatedAsyncioTestCase):
         def network_error(request):
             raise httpx.ReadTimeout("private-network-detail", request=request)
 
-        for respond in (network_error, lambda request: httpx.Response(
-                200, content=b"x" * (1024 * 1024 + 1))):
+        for respond in (
+            network_error,
+            lambda request: httpx.Response(200, content=b"x" * (1024 * 1024 + 1)),
+        ):
             async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
                 with self.assertRaises(ModelError) as caught:
                     await PexelsService(self.settings(), client).search("鲸鱼")

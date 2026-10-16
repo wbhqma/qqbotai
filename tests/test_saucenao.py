@@ -9,7 +9,6 @@ from app.images import normalize_image
 from app.llm import ModelError
 from app.saucenao import MAX_IMAGE, MAX_RESPONSE, SauceNaoService
 
-
 KEY = "saucenao-local-test-key"
 
 
@@ -23,14 +22,22 @@ def picture():
 
 
 def result(score="93.25", hidden=0, **data):
-    return {"header": {"similarity": score, "hidden": hidden, "index_id": 5,
-                       "thumbnail": "https://private.example/thumbnail.jpg"},
-            "data": {"title": "蓝色鲸鱼", "member_name": "测试画师", "pixiv_id": "12345678", **data}}
+    return {
+        "header": {
+            "similarity": score,
+            "hidden": hidden,
+            "index_id": 5,
+            "thumbnail": "https://private.example/thumbnail.jpg",
+        },
+        "data": {"title": "蓝色鲸鱼", "member_name": "测试画师", "pixiv_id": "12345678", **data},
+    }
 
 
 def payload(results=None, status=0, **header):
-    return {"header": {"status": status, "short_remaining": 3, "long_remaining": 99, **header},
-            "results": [result()] if results is None else results}
+    return {
+        "header": {"status": status, "short_remaining": 3, "long_remaining": 99, **header},
+        "results": [result()] if results is None else results,
+    }
 
 
 class SauceNaoTests(unittest.IsolatedAsyncioTestCase):
@@ -55,13 +62,22 @@ class SauceNaoTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn(b'name="file"; filename="image.jpg"', request.content)
             self.assertIn(b"Content-Type: image/jpeg", request.content)
             self.assertIn(clean, request.content)
-            for private in (b"private-test-metadata", b"qpic.cn", b"group_id", b"user_id", b"other-private-key"):
+            for private in (
+                b"private-test-metadata",
+                b"qpic.cn",
+                b"group_id",
+                b"user_id",
+                b"other-private-key",
+            ):
                 self.assertNotIn(private, request.content)
             return httpx.Response(200, json=payload())
 
-        async with httpx.AsyncClient(transport=httpx.MockTransport(respond), auth=("user", "password"),
-                                     headers={"Authorization": "other-private-key", "X-API-Key": "other"},
-                                     cookies={"private-cookie": "hidden"}) as client:
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(respond),
+            auth=("user", "password"),
+            headers={"Authorization": "other-private-key", "X-API-Key": "other"},
+            cookies={"private-cookie": "hidden"},
+        ) as client:
             service = SauceNaoService(self.settings(), client)
             answer = await service.search(clean)
             self.assertIn("不能认证原作者", answer)
@@ -86,22 +102,44 @@ class SauceNaoTests(unittest.IsolatedAsyncioTestCase):
                     await service.search(invalid)
 
     async def test_low_hidden_nonfinite_and_malformed_results_are_filtered(self):
-        rows = [None, {}, {"header": [], "data": {}}, result(score="69.99"), result(score="NaN"),
-                result(score="inf"), result(score="-inf"), result(score="101"), result(score="-1"),
-                result(score=None), result(hidden=1), result(hidden="1"), result(hidden="3")]
-        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(
-                200, json=payload(results=rows)))) as client:
+        rows = [
+            None,
+            {},
+            {"header": [], "data": {}},
+            result(score="69.99"),
+            result(score="NaN"),
+            result(score="inf"),
+            result(score="-inf"),
+            result(score="101"),
+            result(score="-1"),
+            result(score=None),
+            result(hidden=1),
+            result(hidden="1"),
+            result(hidden="3"),
+        ]
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(200, json=payload(results=rows))
+            )
+        ) as client:
             answer = await SauceNaoService(self.settings(), client).search(picture())
         self.assertIn("没有找到", answer)
         self.assertNotIn("12345678", answer)
         self.assertNotIn("测试画师", answer)
 
     async def test_results_sorted_deduplicated_and_limited_to_three(self):
-        rows = [result(score="70", pixiv_id="1"), result(score="90", pixiv_id="2"),
-                result(score="91", pixiv_id="2"), result(score="85", pixiv_id="3"),
-                result(score="95", pixiv_id="4")]
-        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(
-                200, json=payload(results=rows)))) as client:
+        rows = [
+            result(score="70", pixiv_id="1"),
+            result(score="90", pixiv_id="2"),
+            result(score="91", pixiv_id="2"),
+            result(score="85", pixiv_id="3"),
+            result(score="95", pixiv_id="4"),
+        ]
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(200, json=payload(results=rows))
+            )
+        ) as client:
             answer = await SauceNaoService(self.settings(), client).search(picture())
         self.assertEqual(answer.count("https://www.pixiv.net/artworks/"), 3)
         self.assertLess(answer.index("/artworks/4"), answer.index("/artworks/2"))
@@ -110,17 +148,33 @@ class SauceNaoTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_external_source_urls_are_checked_and_never_fetched(self):
         bad_urls = (
-            "http://example.com/work", "https://127.0.0.1/", "https://[::1]/",
-            "https://192.168.1.1/", "https://169.254.169.254/", "https://intranet.local/",
-            "https://user:password@example.com/", "https://example.com:8443/",
-            "https://example.com/#private", "https://example.com/?token=hidden",
-            "https://example.com/?api_key=hidden", "https://example.com/?rkey=hidden",
-            "https://example.com/?X-Amz-Credential=hidden", "https://example.com/%0a",
-            "https://example.com/" + KEY, "file:///private", "javascript:alert(1)",
+            "http://example.com/work",
+            "https://127.0.0.1/",
+            "https://[::1]/",
+            "https://192.168.1.1/",
+            "https://169.254.169.254/",
+            "https://intranet.local/",
+            "https://user:password@example.com/",
+            "https://example.com:8443/",
+            "https://example.com/#private",
+            "https://example.com/?token=hidden",
+            "https://example.com/?api_key=hidden",
+            "https://example.com/?rkey=hidden",
+            "https://example.com/?X-Amz-Credential=hidden",
+            "https://example.com/%0a",
+            "https://example.com/" + KEY,
+            "file:///private",
+            "javascript:alert(1)",
         )
         rows = [result(pixiv_id=None, ext_urls=[url]) for url in bad_urls]
-        rows.append(result(pixiv_id=None, ext_urls=["https://example.org/artwork/1"],
-                           member_name="", creator=["画师甲", "画师乙"]))
+        rows.append(
+            result(
+                pixiv_id=None,
+                ext_urls=["https://example.org/artwork/1"],
+                member_name="",
+                creator=["画师甲", "画师乙"],
+            )
+        )
         requests = []
 
         def respond(request):
@@ -137,12 +191,19 @@ class SauceNaoTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("127.0.0.1", answer)
 
     async def test_pixiv_ids_are_digits_only_and_text_does_not_reflect_key(self):
-        rows = [result(pixiv_id="bad-id", ext_urls=[]), result(pixiv_id=True, ext_urls=[]),
-                result(pixiv_id="12345678?token=secret", ext_urls=[]),
-                result(pixiv_id=12345, title=KEY + " " + "题" * 500,
-                       member_name=KEY + " " + "名" * 500)]
-        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(
-                200, json=payload(results=rows)))) as client:
+        rows = [
+            result(pixiv_id="bad-id", ext_urls=[]),
+            result(pixiv_id=True, ext_urls=[]),
+            result(pixiv_id="12345678?token=secret", ext_urls=[]),
+            result(
+                pixiv_id=12345, title=KEY + " " + "题" * 500, member_name=KEY + " " + "名" * 500
+            ),
+        ]
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(200, json=payload(results=rows))
+            )
+        ) as client:
             answer = await SauceNaoService(self.settings(), client).search(picture())
         self.assertIn("https://www.pixiv.net/artworks/12345", answer)
         self.assertNotIn(KEY, answer)
@@ -155,19 +216,33 @@ class SauceNaoTests(unittest.IsolatedAsyncioTestCase):
 
             def respond(request):
                 calls.append(request)
-                return httpx.Response(status, text="private-response-" + KEY,
-                                      headers={"Location": "https://private.example/"})
+                return httpx.Response(
+                    status,
+                    text="private-response-" + KEY,
+                    headers={"Location": "https://private.example/"},
+                )
 
-            async with httpx.AsyncClient(transport=httpx.MockTransport(respond), follow_redirects=True) as client:
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(respond), follow_redirects=True
+            ) as client:
                 with self.subTest(status=status), self.assertRaises(ModelError) as caught:
                     await SauceNaoService(self.settings(), client).search(picture())
                 self.assertNotIn(KEY, str(caught.exception))
                 self.assertNotIn("private-response", str(caught.exception))
                 self.assertEqual(len(calls), 1)
-        for header in ({"status": -1}, {"status": -2, "short_remaining": 0},
-                       {"status": -2, "long_remaining": 0}, {"status": 1}):
-            async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(
-                    200, json=payload(**header, message="private-" + KEY)))) as client:
+        for header in (
+            {"status": -1},
+            {"status": -2, "short_remaining": 0},
+            {"status": -2, "long_remaining": 0},
+            {"status": 1},
+        ):
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(
+                    lambda request: httpx.Response(
+                        200, json=payload(**header, message="private-" + KEY)
+                    )
+                )
+            ) as client:
                 with self.assertRaises(ModelError) as caught:
                     await SauceNaoService(self.settings(), client).search(picture())
                 self.assertNotIn("private", str(caught.exception))
@@ -195,8 +270,11 @@ class SauceNaoTests(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn(KEY, str(caught.exception))
 
     async def test_valid_empty_search_returns_explanation_and_owned_client_closes(self):
-        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(
-                200, json=payload(results=[])))) as client:
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(200, json=payload(results=[]))
+            )
+        ) as client:
             answer = await SauceNaoService(self.settings(), client).search(picture())
             self.assertIn("搜索仅覆盖", answer)
         service = SauceNaoService(self.settings())

@@ -18,14 +18,24 @@ from scripts.check_privacy import check_project, inspect_text
 class PrivacyTests(unittest.TestCase):
     def test_config_diagnostics_hide_identifiers_names_and_private_endpoints(self):
         settings = Settings(
-            napcat_self_id="test-application-id", onebot_access_token="test-secret",
-            bot_name="test-private-name", allowed_groups=frozenset({"test-private-group"}),
-            llm_base_url="https://private-gateway.example/v1", llm_model="test-internal-model",
+            napcat_self_id="test-application-id",
+            onebot_access_token="test-secret",
+            bot_name="test-private-name",
+            allowed_groups=frozenset({"test-private-group"}),
+            llm_base_url="https://private-gateway.example/v1",
+            llm_model="test-internal-model",
             llm_api_key="test-model-key",
         )
         visible = repr(settings) + repr(settings.resolve_llm()) + str(settings.status())
-        for value in (settings.napcat_self_id, settings.onebot_access_token, settings.bot_name,
-                      settings.llm_base_url, settings.llm_model, settings.llm_api_key, "test-private-group"):
+        for value in (
+            settings.napcat_self_id,
+            settings.onebot_access_token,
+            settings.bot_name,
+            settings.llm_base_url,
+            settings.llm_model,
+            settings.llm_api_key,
+            "test-private-group",
+        ):
             self.assertNotIn(value, visible)
 
     def test_framework_logs_do_not_render_message_exception_locals_or_extras(self):
@@ -50,20 +60,33 @@ class PrivacyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             (root / ".env").write_text(
-                'ONEBOT_ACCESS_TOKEN=0123456789abcdef\nNAPCAT_ALLOWED_GROUPS=20000\nBOT_NAME=test-private-name\n'
-                'LLM_PROVIDER=compatible\nLLM_BASE_URL=https://private-gateway.example/v1\n'
-                'LLM_MODEL=test-internal-model\nLLM_API_KEY=test-model-key\n', encoding="utf-8",
+                "ONEBOT_ACCESS_TOKEN=0123456789abcdef\nNAPCAT_ALLOWED_GROUPS=20000\nBOT_NAME=test-private-name\n"
+                "LLM_PROVIDER=compatible\nLLM_BASE_URL=https://private-gateway.example/v1\n"
+                "LLM_MODEL=test-internal-model\nLLM_API_KEY=test-model-key\n",
+                encoding="utf-8",
             )
             prompts = []
+
             def blank(prompt):
                 prompts.append(prompt)
                 return ""
+
             output = io.StringIO()
-            with patch("configure.ROOT", root), patch("builtins.input", side_effect=blank), \
-                    patch("configure.getpass", side_effect=blank), contextlib.redirect_stdout(output):
+            with (
+                patch("configure.ROOT", root),
+                patch("builtins.input", side_effect=blank),
+                patch("configure.getpass", side_effect=blank),
+                contextlib.redirect_stdout(output),
+            ):
                 self.assertEqual(configure(), 0)
             visible = output.getvalue() + " ".join(prompts)
-            for value in ("test-secret", "test-model-key", "test-private-name", "private-gateway.example", "test-internal-model"):
+            for value in (
+                "test-secret",
+                "test-model-key",
+                "test-private-name",
+                "private-gateway.example",
+                "test-internal-model",
+            ):
                 self.assertNotIn(value, visible)
 
     def test_nonempty_example_secret_is_rejected_even_without_a_known_local_value(self):
@@ -75,8 +98,10 @@ class PrivacyTests(unittest.TestCase):
     def test_ignored_env_is_excluded_but_force_staged_env_is_rejected(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
+
             def run(*args):
                 subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+
             run("init", "-q")
             (root / ".gitignore").write_text(".env\n", encoding="utf-8")
             (root / ".env").write_text("QQ_APP_SECRET=test-local-secret\n", encoding="utf-8")

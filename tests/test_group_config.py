@@ -21,7 +21,7 @@ class GroupConfigTests(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
         self.original = (
-            '# preserve this comment\n'
+            "# preserve this comment\n"
             'ONEBOT_ACCESS_TOKEN="0123456789abcdef"\n'
             'NAPCAT_ALLOWED_GROUPS="20000"\n'
             'LLM_PROVIDER="compatible"\n'
@@ -33,13 +33,24 @@ class GroupConfigTests(unittest.TestCase):
 
     def run_groups(self, answer):
         output = io.StringIO()
-        with patch("configure.ROOT", self.root), patch("configure.getpass", return_value=answer) as prompt, \
-                patch("builtins.input", side_effect=AssertionError("Unexpected visible prompt")), \
-                contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+        with (
+            patch("configure.ROOT", self.root),
+            patch("configure.getpass", return_value=answer) as prompt,
+            patch("builtins.input", side_effect=AssertionError("Unexpected visible prompt")),
+            contextlib.redirect_stdout(output),
+            contextlib.redirect_stderr(output),
+        ):
             result = configure_groups()
         self.assertIn("输入不显示字符", prompt.call_args.args[0])
         visible = output.getvalue() + prompt.call_args.args[0]
-        for value in ("20000", "30000", "40000", "test-model-key", "0123456789abcdef", "test-model-name"):
+        for value in (
+            "20000",
+            "30000",
+            "40000",
+            "test-model-key",
+            "0123456789abcdef",
+            "test-model-name",
+        ):
             self.assertNotIn(value, visible)
         return result, visible
 
@@ -51,7 +62,9 @@ class GroupConfigTests(unittest.TestCase):
                 result, _ = self.run_groups(" 30000, 40000 ")
                 self.assertEqual(result, 0)
                 updated = self.path.read_bytes().decode("utf-8")
-                expected = original.replace('NAPCAT_ALLOWED_GROUPS="20000"', "NAPCAT_ALLOWED_GROUPS='30000,40000'")
+                expected = original.replace(
+                    'NAPCAT_ALLOWED_GROUPS="20000"', "NAPCAT_ALLOWED_GROUPS='30000,40000'"
+                )
                 self.assertEqual(updated, expected)
                 self.assertEqual(dotenv_values(self.path)["NAPCAT_ALLOWED_GROUPS"], "30000,40000")
                 self.assertEqual(sorted(p.name for p in self.root.iterdir()), [".env"])
@@ -98,8 +111,10 @@ class GroupConfigTests(unittest.TestCase):
         self.assertEqual(sorted(p.name for p in self.root.iterdir()), [".env"])
 
     def test_cli_routes_only_to_the_group_wizard(self):
-        with patch("configure.configure_groups", return_value=7) as groups, \
-                patch("configure.configure", side_effect=AssertionError("Full wizard called")), \
-                patch("configure.check_configuration", side_effect=AssertionError("Full check called")):
+        with (
+            patch("configure.configure_groups", return_value=7) as groups,
+            patch("configure.configure", side_effect=AssertionError("Full wizard called")),
+            patch("configure.check_configuration", side_effect=AssertionError("Full check called")),
+        ):
             self.assertEqual(main(["--groups"]), 7)
         groups.assert_called_once_with()

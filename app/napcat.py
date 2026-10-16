@@ -33,13 +33,20 @@ def merge_client(config: dict, token: str, port: int) -> dict:
     clients = network.get("websocketClients", [])
     if not isinstance(clients, list) or any(not isinstance(c, dict) for c in clients):
         raise ValueError("NapCat 客户端配置格式无效。")
-    network["websocketClients"] = [c for c in clients if c.get("name") != CLIENT_NAME] + [{
-        "name": CLIENT_NAME, "enable": True,
-        "url": f"ws://127.0.0.1:{port}/onebot/v11/",
-        "messagePostFormat": "array", "reportSelfMessage": False,
-        "reconnectInterval": 5000, "heartInterval": 30000,
-        "token": token, "debug": False, "verifyCertificate": True,
-    }]
+    network["websocketClients"] = [c for c in clients if c.get("name") != CLIENT_NAME] + [
+        {
+            "name": CLIENT_NAME,
+            "enable": True,
+            "url": f"ws://127.0.0.1:{port}/onebot/v11/",
+            "messagePostFormat": "array",
+            "reportSelfMessage": False,
+            "reconnectInterval": 5000,
+            "heartInterval": 30000,
+            "token": token,
+            "debug": False,
+            "verifyCertificate": True,
+        }
+    ]
     for kind in ("httpServers", "httpSseServers", "httpClients", "websocketServers", "plugins"):
         network.setdefault(kind, [])
     result["network"] = network
@@ -54,8 +61,11 @@ def prepare(env_file: Path, workdir: Path = DEFAULT_WORKDIR) -> None:
     config_dir = workdir / "config"
     paths = [config_dir / "onebot11.json"]
     if config_dir.exists():
-        paths.extend(p for p in config_dir.iterdir()
-                     if re.fullmatch(r"onebot11_[0-9]+\.json", p.name) and p.is_file())
+        paths.extend(
+            p
+            for p in config_dir.iterdir()
+            if re.fullmatch(r"onebot11_[0-9]+\.json", p.name) and p.is_file()
+        )
     # 先验证所有账号配置，避免遇到损坏文件时只更新一部分。
     changes = [(path, merge_client(load_json(path), token, port)) for path in paths]
     webui_path = config_dir / "webui.json"
@@ -75,5 +85,7 @@ def prepare(env_file: Path, workdir: Path = DEFAULT_WORKDIR) -> None:
             if not backup.exists():
                 shutil.copy2(path, backup)
         temporary = path.with_suffix(path.suffix + ".tmp")
-        temporary.write_text(json.dumps(updated, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        temporary.write_text(
+            json.dumps(updated, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
         temporary.replace(path)

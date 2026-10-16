@@ -28,7 +28,11 @@ def private_log_filter(record: dict[str, Any]) -> bool:
         summary = "插件加载失败，请检查安装和配置。"
     elif "disconnected" in message or "connection closed" in message or "closed by peer" in message:
         summary = "QQ 连接已断开，等待框架重连。"
-    elif "successfully connected" in message or "websocket connection established" in message or ("bot " in message and " connected" in message):
+    elif (
+        "successfully connected" in message
+        or "websocket connection established" in message
+        or ("bot " in message and " connected" in message)
+    ):
         summary = "QQ 连接已建立。"
     elif record.get("name") == "plugins.qq_chat":
         summary = "QQ 消息处理失败，原始请求和异常详情已隐藏。"
