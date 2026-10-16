@@ -132,6 +132,43 @@ def configure_tavily() -> int:
     return 0
 
 
+def configure_saucenao() -> int:
+    """只更新插画溯源凭证，保留模型和其他搜索服务设置。"""
+    path = ROOT / ".env"
+    values = dotenv_values(path, encoding="utf-8", interpolate=False) if path.exists() else {}
+    print("SauceNAO 插画溯源：登录账号后在 https://saucenao.com/user.php?page=search-api 查看 API Key。")
+    print("密钥只保存在本机；直接回车保留已有值，输入 - 清空并禁用。")
+    entered = getpass("SauceNAO API Key（输入不显示字符）：").strip()
+    current = (values.get("SAUCENAO_API_KEY") or "").strip()
+    if not entered:
+        if not current:
+            print("尚未填写 SauceNAO 密钥；本次未修改配置，具体值已隐藏。")
+            return 2
+        print("已保留 SauceNAO 配置；其他配置未修改，密钥已隐藏。")
+        return 0
+    value = "" if entered == "-" else entered
+    if any(ord(char) < 32 or ord(char) == 127 for char in value):
+        print("SauceNAO 密钥格式无效；本次未修改配置，具体值已隐藏。")
+        return 2
+    original = path.read_bytes() if path.exists() else b""
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=ROOT, prefix=".env.saucenao-", suffix=".tmp", delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(original)
+        set_key(temporary, "SAUCENAO_API_KEY", value, encoding="utf-8")
+        newline = "\r\n" if b"\r\n" in original else "\n"
+        updated = temporary.read_text(encoding="utf-8")
+        with temporary.open("w", encoding="utf-8", newline="") as stream:
+            stream.write(updated.replace("\n", newline))
+        temporary.replace(path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    print("SauceNAO 配置已保存；请重启 AI 程序使设置生效。其他配置保留，密钥已隐藏。")
+    return 0
+
+
 def configure() -> int:
     path = ROOT / ".env"
     values = dict(dotenv_values(path, encoding="utf-8")) if path.exists() else {}
@@ -251,6 +288,7 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--groups", action="store_true", help="仅修改允许的真实群号，不重填模型配置")
     mode.add_argument("--pexels", action="store_true", help="仅配置 Pexels 关键词找图服务")
     mode.add_argument("--tavily", action="store_true", help="仅配置 Tavily 联网搜索服务")
+    mode.add_argument("--saucenao", action="store_true", help="仅配置 SauceNAO 插画溯源服务")
     args = parser.parse_args(argv)
     if args.groups:
         return configure_groups()
@@ -258,6 +296,8 @@ def main(argv: list[str] | None = None) -> int:
         return configure_pexels()
     if args.tavily:
         return configure_tavily()
+    if args.saucenao:
+        return configure_saucenao()
     return check_configuration() if args.check else configure()
 
 

@@ -11,6 +11,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 from app.config import Settings
 from app.llm import LLMClient, ModelError
+from app.saucenao import SauceNaoService
 
 MAX_DOWNLOAD = 5 * 1024 * 1024
 MAX_PIXELS = 20_000_000
@@ -155,9 +156,11 @@ class ImageService:
             raise ModelError("视觉服务未返回分析文本；请检查模型是否支持图片，或服务是否拒绝了本次输入。") from None
 
     async def search(self, picture: bytes) -> str:
+        if self.settings.saucenao_api_key:
+            return await SauceNaoService(self.settings, self.client).search(picture)
         key = self.settings.serpapi_api_key
         if not key:
-            raise ModelError("搜图尚未配置，请管理员在本机填写 SERPAPI_API_KEY。")
+            raise ModelError("图片溯源尚未配置，请管理员在本机运行 configure.ps1 -SauceNao 配置插画溯源。")
         upload = await self._json("POST", "https://serpapi.com/image", data={"api_key": key},
                                   files={"image": ("image.jpg", picture, "image/jpeg")})
         image_id = upload.get("image_id")
@@ -200,8 +203,8 @@ class ImageService:
         if mode not in ("search", "analyze"):
             raise ModelError("不支持的图片操作。")
         # 未配置时不下载、更不上传图片。
-        if mode == "search" and not self.settings.serpapi_api_key:
-            raise ModelError("搜图尚未配置，请管理员在本机填写 SERPAPI_API_KEY。")
+        if mode == "search" and not (self.settings.saucenao_api_key or self.settings.serpapi_api_key):
+            raise ModelError("图片溯源尚未配置，请管理员在本机运行 configure.ps1 -SauceNao 配置插画溯源。")
         if mode == "analyze" and (self.vision is None or (
                 not self.vision.config.api_key and self.vision.config.provider != "ollama")):
             raise ModelError("识图尚未配置，请管理员在本机填写 VISION 接口、模型和密钥。")

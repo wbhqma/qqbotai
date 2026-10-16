@@ -8,6 +8,8 @@ from app.images import ImageService
 from app.pexels import PexelsService, PhotoResult
 from app.websearch import WebSearchService
 
+REVERSE_COMMANDS = ("/搜图", "/查出处", "/出处")
+
 async def explicitly_mentioned(bot: Bot, event: GroupMessageEvent) -> bool:
     # 用原始消息中的 @ 段判断，避免昵称、引用或 @全体成员触发。
     return any(s.type == "at" and str(s.data.get("qq")) == str(bot.self_id)
@@ -121,15 +123,15 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent) -> None:
                 photo_result = await pexels.search(question)
                 return photo_result.caption
 
-        elif picture_segments or command == "/识图":
+        elif picture_segments or command == "/识图" or command in REVERSE_COMMANDS:
             if len(picture_segments) != 1:
-                await send_reply("请在同一条消息中 @我，并附带一张图片；可用 /识图 或 /搜图。")
+                await send_reply("请在同一条消息中 @我，并附带一张图片；可用 /识图 或 /查出处。")
                 return
             if images is None:
                 await send_reply("图片功能尚未初始化，请重启机器人。")
                 return
             segment = picture_segments[0]
-            mode = "search" if command == "/搜图" else "analyze"
+            mode = "search" if command in REVERSE_COMMANDS else "analyze"
             prompt = question if command == "/识图" else text
             async def operation() -> str:
                 return await images.process(segment.data.get("url", ""), mode, prompt)

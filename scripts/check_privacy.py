@@ -16,6 +16,7 @@ PRIVATE_FIELDS = {
     "ONEBOT_ACCESS_TOKEN", "NAPCAT_ALLOWED_GROUPS", "NAPCAT_SELF_ID", "VISION_API_KEY", "SERPAPI_API_KEY",
     "PEXELS_API_KEY",
     "TAVILY_API_KEY",
+    "SAUCENAO_API_KEY",
 }
 PRIVATE_DIRS = {
     ".git", ".venv", ".cache", ".idea", ".vscode", "__pycache__",

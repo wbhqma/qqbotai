@@ -1,8 +1,8 @@
-param([switch]$Groups, [switch]$Pexels, [switch]$Tavily, [switch]$Check)
+param([switch]$Groups, [switch]$Pexels, [switch]$Tavily, [switch]$SauceNao, [switch]$Check)
 $ErrorActionPreference = 'Stop'
-$taskModes = [int]$Groups.IsPresent + [int]$Pexels.IsPresent + [int]$Tavily.IsPresent + [int]$Check.IsPresent
+$taskModes = [int]$Groups.IsPresent + [int]$Pexels.IsPresent + [int]$Tavily.IsPresent + [int]$SauceNao.IsPresent + [int]$Check.IsPresent
 if ($taskModes -gt 1) {
-    Write-Output 'Choose only one of -Groups, -Pexels, -Tavily or -Check.'
+    Write-Output 'Choose only one of -Groups, -Pexels, -Tavily, -SauceNao or -Check.'
     exit 2
 }
 $taskVenv = if ($env:QQBOT_VENV) { $env:QQBOT_VENV } else { 'D:\IDE\python-envs\qqbotai' }
@@ -24,6 +24,10 @@ try {
     elseif ($Tavily) {
         try { $Host.UI.RawUI.WindowTitle = 'qqbotai - Tavily setup' } catch { }
         & $taskPython -X utf8 (Join-Path $PSScriptRoot 'configure.py') --tavily
+    }
+    elseif ($SauceNao) {
+        try { $Host.UI.RawUI.WindowTitle = 'qqbotai - SauceNAO setup' } catch { }
+        & $taskPython -X utf8 (Join-Path $PSScriptRoot 'configure.py') --saucenao
     }
     elseif ($Check) {
         & $taskPython -X utf8 (Join-Path $PSScriptRoot 'configure.py') --check

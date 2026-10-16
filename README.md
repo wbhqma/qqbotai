@@ -76,6 +76,7 @@ Set-Location 'D:\Project\兴趣班\qqbotai'
 | @机器人 + 一张图片 | 默认客观描述图片 |
 | @机器人 /找图 猫 | 从 Pexels 摄影图库找一张图片，并附摄影师与来源链接 |
 | @机器人 /搜图 海边 | 没有附图时，按关键词从 Pexels 找图 |
+| @机器人 /查出处 + 一张图片 | 查插画候选作品页、页面署名与相似度，支持 `/出处` 别名 |
 | @机器人 /搜图 + 一张图片 | 返回最多 3 条来源/相似网页链接 |
 | @机器人 /帮助 | 查看命令和上传说明 |
 
@@ -108,6 +109,7 @@ Set-Location 'D:\Project\兴趣班\qqbotai'
 | `SERPAPI_API_KEY` | SerpApi 搜图服务独立密钥 |
 | `PEXELS_API_KEY` | Pexels 关键词找图独立密钥，与模型密钥分开 |
 | `TAVILY_API_KEY` | Tavily 网页检索独立密钥，用于 `/搜索` |
+| `SAUCENAO_API_KEY` | SauceNAO 插画溯源密钥，用于 `/查出处` 或附图的 `/搜图` |
 
 ### 文本与视觉模型
 
@@ -133,7 +135,17 @@ API 依据：[OpenAI 官方图片文档](https://developers.openai.com/api/docs/
 
 程序只从 Pexels 图片域名下载有限大小的图片，去元数据后以内存图片发送；下载失败则返回来源链接。关键词和结果不写入聊天历史或磁盘。少量已验证的图片元数据可在进程内缓存最多 24 小时，重启清空。
 
-### 以图搜图（可选，SerpApi）
+### 插画溯源（SauceNAO）
+
+图片描述、关键词搜图和以图查出处是不同功能。Tavily 负责文本网页检索，Pexels 负责摄影关键词找图，插画溯源由 SauceNAO 匹配图片索引，不由语言模型猜原作者。
+
+登录 [SauceNAO 账号 API 页面](https://saucenao.com/user.php?page=search-api) 获取 Key，运行 `.\configure.ps1 -SauceNao`（或 `python configure.py --saucenao`）在本机隐藏填写，保存后重启 AI。回车保留，输入 `-` 清空。未配置图片溯源服务时不会下载、上传本次图片。额度以自己的账号及服务返回状态为准。
+
+同一条消息发送 `@机器人 /查出处` 和一张插画；附图的 `/搜图`、`/出处` 也可使用。返回最多 3 个可展示候选、相似度与页面署名，不下载或转发结果缩略图。低相似度、无来源链接或隐藏结果不作为可展示候选。索引未收录、裁剪或较大改动可能找不到匹配；相似度不等于原作或作者认证。
+
+查询时仅上传去元数据并压缩的 JPEG 与 SauceNAO 自身凭证，不传原始 QQ 签名 URL、群号、发送者或聊天历史；不保存图片与结果。如果同时配置 SauceNAO 和 SerpApi，优先使用 SauceNAO，不自动把同一图片再传给另一服务。
+
+### 通用以图搜图（可选，SerpApi）
 
 `/搜图` 使用 [SerpApi Google Lens](https://serpapi.com/google-lens-api)，需要单独申请并填写该服务的 API Key，可能计费。程序将图片压缩为小于 500 KB 的 JPEG，通过 [Image API](https://serpapi.com/image-api) 上传，再用 image_id 搜索。不会向搜索服务发送原始 QQ 图片 URL、群号或用户 QQ 号。
 
@@ -174,6 +186,7 @@ Linux / macOS 可自行创建虚拟环境并安装 `requirements.lock`，然后�
 - `app/images.py`：图片下载验证、去元数据、视觉协议和搜图。
 - `app/pexels.py`：关键词摄影图片搜索、署名、来源链接与图片下载。
 - `app/websearch.py`：Tavily 网页检索、模型总结及来源链接。
+- `app/saucenao.py`：插画以图匹配、相似度与候选作品页。
 - `app/llm.py`：文本模型协议。
 - `app/config.py` / `configure.py`：配置读取、本机向导与非交互启动配置检查。
 - `app/persona.py`：自定义人设。
