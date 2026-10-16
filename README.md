@@ -2,7 +2,7 @@
 
 使用你自己的普通 QQ 账号运行的群聊 AI，基于 Python + NoneBot2，通过 NapCat / OneBot V11 接收和发送消息。无需注册官方机器人，也不需要 QQ 开放平台 AppID / AppSecret。只有允许的群中明确 @登录的 QQ 时回复，默认 AI 名字为“哦鲸鲸”，已有自定义人设已保留。
 
-支持文本聊天、近期记忆、多模型协议、看图分析及以图搜图。模型和搜索服务需由运行者自行配置；未配置图片服务时会提示管理员，不会下载或上传图片。
+支持文本聊天、近期记忆、多模型协议、看图分析、Tavily 联网搜索、Pexels 关键词找图及以图搜图。模型和搜索服务需由运行者自行配置；未配置对应服务时会提示管理员，不会调用该服务。
 
 ## Windows 启动
 
@@ -71,8 +71,11 @@ Set-Location 'D:\Project\兴趣班\qqbotai'
 | @机器人 /ping | 检查 QQ 收发，不调用模型 |
 | @机器人 你好 | 文本聊天 |
 | @机器人 /清空 | 清空自己在当前群的近期文字记忆 |
+| @机器人 /搜索 青岛最近有什么新闻 | Tavily 检索网页，再由当前文本模型总结并附来源 |
 | @机器人 /识图 图片里写了什么 + 一张图片 | 看图回答、提取文字 |
 | @机器人 + 一张图片 | 默认客观描述图片 |
+| @机器人 /找图 猫 | 从 Pexels 摄影图库找一张图片，并附摄影师与来源链接 |
+| @机器人 /搜图 海边 | 没有附图时，按关键词从 Pexels 找图 |
 | @机器人 /搜图 + 一张图片 | 返回最多 3 条来源/相似网页链接 |
 | @机器人 /帮助 | 查看命令和上传说明 |
 
@@ -103,6 +106,8 @@ Set-Location 'D:\Project\兴趣班\qqbotai'
 | `VISION_MODEL` | 必须是支持图片输入的视觉模型，不能仅用文本模型名称代替 |
 | `VISION_API_KEY` | 视觉接口独立密钥，不自动沿用文本服务的密钥 |
 | `SERPAPI_API_KEY` | SerpApi 搜图服务独立密钥 |
+| `PEXELS_API_KEY` | Pexels 关键词找图独立密钥，与模型密钥分开 |
+| `TAVILY_API_KEY` | Tavily 网页检索独立密钥，用于 `/搜索` |
 
 ### 文本与视觉模型
 
@@ -112,7 +117,23 @@ compatible 的地址通常填到 `/v1` 层，程序追加 `/chat/completions`；
 
 API 依据：[OpenAI 官方图片文档](https://developers.openai.com/api/docs/guides/images-vision)、[Claude Vision](https://platform.claude.com/docs/en/build-with-claude/vision)、[Gemini 图片理解](https://ai.google.dev/gemini-api/docs/image-understanding)、[千问视觉](https://help.aliyun.com/zh/model-studio/vision)。
 
-### 以图搜图
+### 联网搜索（Tavily）
+
+在 [Tavily 控制台](https://app.tavily.com/) 注册并取得 API Key，再运行 `.\configure.ps1 -Tavily`（或 `python configure.py --tavily`）在本机隐藏填写。回车保留已有值，输入 `-` 禁用；只修改该密钥，保存后重启 AI 程序。密钥不要发到群或上传仓库。
+
+发送 `@机器人 /搜索 青岛最近有什么新闻`；`/联网`、`/search` 是别名。仅这些明确命令会发起检索，普通聊天保持原行为。程序把本次问题交给 Tavily 的 basic 搜索，然后把有限的网页摘要交给当前文本模型总结，在回复末尾附检索到的来源链接；模型总结失败时仍展示检索摘要和来源，不用模型旧知识冒充搜索结果。
+
+该功能使用 Tavily 搜索额度和当前模型的 Token。参见 [Tavily Search 文档](https://docs.tavily.com/documentation/api-reference/endpoint/search)。不会将 QQ 标识、群号、聊天历史或附件发给 Tavily，不自动读取搜索结果网页；网页内容按不可信数据处理，搜索问题和结果不写入聊天历史或磁盘。来源链接帮助核验，搜索结果和模型总结仍可能有误。
+
+### 关键词找图（Pexels）
+
+在 [Pexels API 页面](https://www.pexels.com/api/new/) 申请 Key，然后运行 `.\configure.ps1 -Pexels`（或 `python configure.py --pexels`）在本机隐藏输入；回车保留已有值，输入 `-` 清空禁用。该向导只修改 Pexels 密钥，保存后重启 AI 程序。
+
+使用 `@机器人 /找图 猫` 或不附图的 `/搜图 海边`。每次返回一张摄影图片，附摄影师、Pexels 名称与照片来源页面；不是全网图片搜索或插画溯源。只向 Pexels 发送关键词，不使用模型，也不上传群图片或账号标识。结果按 [Pexels API 文档](https://www.pexels.com/api/documentation/) 保留署名与来源。
+
+程序只从 Pexels 图片域名下载有限大小的图片，去元数据后以内存图片发送；下载失败则返回来源链接。关键词和结果不写入聊天历史或磁盘。少量已验证的图片元数据可在进程内缓存最多 24 小时，重启清空。
+
+### 以图搜图（可选，SerpApi）
 
 `/搜图` 使用 [SerpApi Google Lens](https://serpapi.com/google-lens-api)，需要单独申请并填写该服务的 API Key，可能计费。程序将图片压缩为小于 500 KB 的 JPEG，通过 [Image API](https://serpapi.com/image-api) 上传，再用 image_id 搜索。不会向搜索服务发送原始 QQ 图片 URL、群号或用户 QQ 号。
 
@@ -151,6 +172,8 @@ Linux / macOS 可自行创建虚拟环境并安装 `requirements.lock`，然后�
 - `plugins/qq_chat.py`：群白名单、明确 @ 判断、命令与图片事件路由。
 - `app/chat.py`：去重、并发、冷却与近期文字记忆。
 - `app/images.py`：图片下载验证、去元数据、视觉协议和搜图。
+- `app/pexels.py`：关键词摄影图片搜索、署名、来源链接与图片下载。
+- `app/websearch.py`：Tavily 网页检索、模型总结及来源链接。
 - `app/llm.py`：文本模型协议。
 - `app/config.py` / `configure.py`：配置读取、本机向导与非交互启动配置检查。
 - `app/persona.py`：自定义人设。

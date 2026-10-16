@@ -89,6 +89,8 @@ class Settings:
     vision_model: str = field(default="", repr=False)
     vision_api_key: str = field(default="", repr=False)
     serpapi_api_key: str = field(default="", repr=False)
+    pexels_api_key: str = field(default="", repr=False)
+    tavily_api_key: str = field(default="", repr=False)
 
     @classmethod
     def load(cls) -> "Settings":
@@ -130,6 +132,8 @@ class Settings:
             vision_model=os.getenv("VISION_MODEL", "").strip(),
             vision_api_key=os.getenv("VISION_API_KEY", "").strip(),
             serpapi_api_key=os.getenv("SERPAPI_API_KEY", "").strip(),
+            pexels_api_key=os.getenv("PEXELS_API_KEY", "").strip(),
+            tavily_api_key=os.getenv("TAVILY_API_KEY", "").strip(),
         )
         settings.resolve_llm()
         settings.resolve_vision()
@@ -202,6 +206,8 @@ class Settings:
             "NAPCAT_PORT": self.napcat_port,
             "VISION": "已配置" if self.resolve_vision() else "待配置",
             "IMAGE_SEARCH": "已配置" if self.serpapi_api_key else "待配置",
+            "KEYWORD_IMAGE_SEARCH": "已配置" if self.pexels_api_key else "待配置",
+            "WEB_SEARCH": "已配置" if self.tavily_api_key else "待配置",
             "LLM_PROVIDER": model.provider,
             "LLM_BASE_URL": "已设置（地址已隐藏）",
             "LLM_MODEL": "已设置（名称已隐藏）",

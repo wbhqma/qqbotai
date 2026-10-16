@@ -11,6 +11,8 @@ from app.config import Settings
 from app.diagnostics import diagnostics
 from app.llm import LLMClient
 from app.images import ImageService
+from app.pexels import PexelsService
+from app.websearch import WebSearchService
 from app.privacy import configure_private_logging
 
 
@@ -43,8 +45,14 @@ def build_bot(settings: Settings, *, offline: bool = False) -> None:
     plugin.module.set_service(ChatService(settings, model))
     images = ImageService(settings)
     plugin.module.set_images(images)
+    pexels = PexelsService(settings)
+    plugin.module.set_pexels(pexels)
+    websearch = WebSearchService(settings, model)
+    plugin.module.set_websearch(websearch)
     driver.on_shutdown(model.close)
     driver.on_shutdown(images.close)
+    driver.on_shutdown(pexels.close)
+    driver.on_shutdown(websearch.close)
 
 
 def main() -> int:

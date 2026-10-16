@@ -1,10 +1,12 @@
 from nonebot import logger, on_type
-from nonebot.adapters.onebot.v11 import Bot, Event, GroupMessageEvent, MessageSegment
+from nonebot.adapters.onebot.v11 import Bot, Event, GroupMessageEvent, Message, MessageSegment
 from nonebot.message import event_preprocessor
 
 from app.chat import ChatService
 from app.diagnostics import diagnostics
 from app.images import ImageService
+from app.pexels import PexelsService, PhotoResult
+from app.websearch import WebSearchService
 
 async def explicitly_mentioned(bot: Bot, event: GroupMessageEvent) -> bool:
     # 用原始消息中的 @ 段判断，避免昵称、引用或 @全体成员触发。
@@ -15,6 +17,8 @@ async def explicitly_mentioned(bot: Bot, event: GroupMessageEvent) -> bool:
 chat = on_type(GroupMessageEvent, rule=explicitly_mentioned, priority=10, block=True)
 service: ChatService | None = None
 images: ImageService | None = None
+pexels: PexelsService | None = None
+websearch: WebSearchService | None = None
 
 
 def set_service(value: ChatService) -> None:
@@ -25,6 +29,16 @@ def set_service(value: ChatService) -> None:
 def set_images(value: ImageService) -> None:
     global images
     images = value
+
+
+def set_pexels(value: PexelsService | None) -> None:
+    global pexels
+    pexels = value
+
+
+def set_websearch(value: WebSearchService | None) -> None:
+    global websearch
+    websearch = value
 
 
 @event_preprocessor
@@ -59,11 +73,15 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent) -> None:
     key = (str(bot.self_id), group, event.get_user_id())
     diagnostics.increment("handled")
     send_failed = False
+    photo_result: PhotoResult | None = None
 
     async def send_reply(answer: str) -> object:
         nonlocal send_failed
         try:
-            result = await bot.send(event, MessageSegment.text(answer))
+            reply = MessageSegment.text(answer)
+            if photo_result is not None and photo_result.image:
+                reply = Message(reply) + MessageSegment.image(photo_result.image)
+            result = await bot.send(event, reply)
         except Exception:
             send_failed = True
             diagnostics.increment("reply_errors")
@@ -78,8 +96,32 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent) -> None:
         command = parts[0] if parts else ""
         question = parts[1] if len(parts) > 1 else ""
         operation = None
-        # 图片消息默认识图；精确命令 /搜图 才会交给搜索服务。
-        if picture_segments or command in ("/识图", "/搜图"):
+        if command in ("/搜索", "/联网", "/search"):
+            if not question or picture_segments:
+                await send_reply("联网搜索请发送：@我 /搜索 你想查的问题，无需附图。")
+                return
+            if websearch is None:
+                await send_reply("联网搜索尚未初始化，请重启机器人。")
+                return
+
+            async def operation() -> str:
+                return await websearch.search(question)
+
+        # 关键词找图和图片溯源分别路由，避免把群图片交给摄影图库。
+        elif command == "/找图" or (command == "/搜图" and not picture_segments):
+            if picture_segments or not question:
+                await send_reply("关键词找图请发送：@我 /找图 猫。不用附图；查图片出处可用 /搜图 加一张图片。")
+                return
+            if pexels is None:
+                await send_reply("关键词找图尚未初始化，请重启机器人。")
+                return
+
+            async def operation() -> str:
+                nonlocal photo_result
+                photo_result = await pexels.search(question)
+                return photo_result.caption
+
+        elif picture_segments or command == "/识图":
             if len(picture_segments) != 1:
                 await send_reply("请在同一条消息中 @我，并附带一张图片；可用 /识图 或 /搜图。")
                 return

@@ -14,6 +14,8 @@ ROOT = Path(__file__).resolve().parent.parent
 PRIVATE_FIELDS = {
     "QQ_APP_ID", "QQ_APP_SECRET", "LLM_API_KEY", "DEEPSEEK_API_KEY", "QQ_ALLOWED_GROUPS",
     "ONEBOT_ACCESS_TOKEN", "NAPCAT_ALLOWED_GROUPS", "NAPCAT_SELF_ID", "VISION_API_KEY", "SERPAPI_API_KEY",
+    "PEXELS_API_KEY",
+    "TAVILY_API_KEY",
 }
 PRIVATE_DIRS = {
     ".git", ".venv", ".cache", ".idea", ".vscode", "__pycache__",
@@ -27,7 +29,7 @@ PRIVATE_NAMES = (
 PATTERNS = (
     ("API 凭证格式", re.compile(
         r"sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}"
-        r"|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{30,}"
+        r"|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{30,}|tvly-[A-Za-z0-9_-]{16,}"
     )),
     ("私钥", re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----")),
     ("明文密钥赋值", re.compile(

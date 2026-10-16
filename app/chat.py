@@ -11,7 +11,7 @@ from app.persona import build_system_prompt
 SessionKey = tuple[str, str, str]  # 机器人 QQ、群号、发送者 QQ
 Send = Callable[[str], Awaitable[object]]
 
-HELP = "@我 加上问题，就能聊天。\n/ping：检查在线\n/清空：忘记你在本群的对话\n/识图 [问题] + 一张图：看图回答\n/搜图 + 一张图：查来源和相似网页\n/帮助：查看用法\n图片仅在本次请求处理，云端识图/搜图会上传图片。近期记忆重启清空。"
+HELP = "@我 加上问题，就能聊天。\n/ping：检查在线\n/清空：忘记你在本群的对话\n/搜索 问题：联网检索后总结并附来源（也可用 /联网 或 /search）\n/识图 [问题] + 一张图：看图回答\n/找图 关键词：从 Pexels 找一张摄影图片（也可用 /搜图 关键词）\n/搜图 + 一张图：查来源和相似网页\n/帮助：查看用法\n云端识图/以图搜图会上传本次图片；找图只把关键词发给 Pexels；联网搜索只把本次问题发给 Tavily，再交模型总结。近期记忆重启清空。"
 
 
 @dataclass
