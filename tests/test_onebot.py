@@ -13,7 +13,7 @@ class OneBotTests(unittest.IsolatedAsyncioTestCase):
     @classmethod
     def setUpClass(cls):
         nonebot.init(driver="~none", log_level="WARNING")
-        cls.plugin = nonebot.load_plugin("plugins.qq_chat").module
+        cls.plugin = (nonebot.get_plugin("qq_chat") or nonebot.load_plugin("plugins.qq_chat")).module
 
     def event(self, *, text="/ping", mention="10000", user=30000, pictures=0):
         message = Message()

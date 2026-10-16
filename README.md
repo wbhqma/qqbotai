@@ -21,6 +21,8 @@ Set-Location 'D:\Project\兴趣班\qqbotai'
 
 配置值保存在本机 `.env`，敏感输入不回显；向导保留已有模型配置和机器人名字。以后修改配置可单独运行 `.\configure.ps1`。保存成功后，程序开始等待 NapCat 连接，保留此窗口。
 
+仅修改允许回复的群时，可运行 `.\configure.ps1 -Groups`（或 `python configure.py --groups`），填写群资料页中的真实群号，其他模型与连接设置保持原值。输入不显示字符；保存后重启 AI 程序生效。
+
 Python 环境默认在 `D:\IDE\python-envs\qqbotai`；如环境尚未创建，启动脚本会调用 `.\setup.ps1` 安装依赖。也可提前运行该脚本。`QQBOT_VENV` 可指定其他环境目录，`QQBOT_PYTHON` 可指定基础 Python 解释器。
 
 ### 2. 启动 NapCat，并在本机登录自己的 QQ
@@ -55,6 +57,8 @@ Set-Location 'D:\Project\兴趣班\qqbotai'
 `QQ 连接已建立` 表示 NapCat 已连接到 AI 程序；`等待 NapCat 登录或连接` 表示 AI 程序已运行，但尚未接上 QQ。此查询不显示账号、群号或密钥。然后在允许的群里 **@刚刚登录的 QQ，发送 `/ping`**；收到“我在线”才算群收发联调完成，不会消耗模型额度。
 
 `start.ps1 -Check` 仅检查配置读取及插件装配，不交互、不登录 QQ，也不调用模型或搜索服务；检查通过不代表 QQ 已连接。`python configure.py --check` 则检查启动所需的 Token、允许群号和字段格式，未就绪时返回退出码 `2`。
+
+连接正常但没有回复时，可运行 `python bot.py --diagnose` 查看本机累计的匿名事件计数，区分消息未到达、未明确 @、群不在允许列表或回复发送失败。诊断只保留固定名称的次数，不记录消息、账号、群号、图片地址或异常原文，重启后清零。
 
 连接规范见 [NoneBot OneBot 配置](https://onebot.adapters.nonebot.dev/docs/guide/setup/) 与 [Token 配置](https://onebot.adapters.nonebot.dev/docs/guide/configuration/)。
 

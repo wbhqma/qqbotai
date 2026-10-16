@@ -25,7 +25,9 @@ print("built", flush=True)
 driver = nonebot.get_driver()
 assert str(driver.config.host) == "127.0.0.1"
 with TestClient(driver.server_app) as client:
-    assert client.get("/qqbotai/health").json() == {"service": "qqbotai", "connected": False, "groups_configured": True}
+    health = client.get("/qqbotai/health").json()
+    assert health["service"] == "qqbotai" and health["connected"] is False and health["groups_configured"] is True
+    assert health["diagnostics"]["group_events"] == 0
     print("lifespan started", flush=True)
     try:
         with client.websocket_connect("/onebot/v11/", headers={"X-Self-ID": "10000"}):
@@ -50,6 +52,8 @@ with TestClient(driver.server_app) as client:
         assert result["params"]["group_id"] == 20000
         assert "我在线" in str(result["params"]["message"])
         ws.send_json({"status": "ok", "retcode": 0, "echo": result["echo"], "data": {"message_id": 2}})
+        counts = client.get("/qqbotai/health").json()["diagnostics"]
+        assert counts["group_events"] == 1 and counts["mentioned_events"] == 1
 print("OneBot transport check passed")
 '''
         environment = {k: v for k, v in os.environ.items() if not k.startswith(

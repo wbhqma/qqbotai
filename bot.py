@@ -8,6 +8,7 @@ from nonebot.adapters.onebot.v11 import Adapter
 
 from app.chat import ChatService
 from app.config import Settings
+from app.diagnostics import diagnostics
 from app.llm import LLMClient
 from app.images import ImageService
 from app.privacy import configure_private_logging
@@ -33,7 +34,8 @@ def build_bot(settings: Settings, *, offline: bool = False) -> None:
         connected = any(not settings.napcat_self_id or bot.self_id == settings.napcat_self_id
                         for bot in nonebot.get_bots().values())
         return {"service": "qqbotai", "connected": connected,
-                "groups_configured": bool(settings.allowed_groups)}
+                "groups_configured": bool(settings.allowed_groups),
+                "diagnostics": diagnostics.snapshot()}
     plugin = nonebot.load_plugin("plugins.qq_chat")
     if plugin is None:
         raise RuntimeError("聊天插件加载失败。")
@@ -50,10 +52,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="qqbotai：使用你自己的 QQ 账号运行群聊 AI")
     parser.add_argument("--check", action="store_true", help="检查配置与插件，不连接 QQ 或模型")
     parser.add_argument("--status", action="store_true", help="只查询本机 qqbotai 是否运行及连接，不显示账号信息")
+    parser.add_argument("--diagnose", action="store_true", help="查询本机匿名事件计数，不显示消息、账号或群号")
     args = parser.parse_args()
     try:
         settings = Settings.load()
-        if args.status:
+        if args.status or args.diagnose:
             try:
                 response = httpx.get(f"http://127.0.0.1:{settings.napcat_port}/qqbotai/health", timeout=3, trust_env=False)
                 response.raise_for_status()
@@ -61,6 +64,14 @@ def main() -> int:
                 if status.get("service") != "qqbotai":
                     raise ValueError
                 print("qqbotai 已运行；" + ("QQ 连接已建立。" if status.get("connected") else "等待 NapCat 登录或连接。"))
+                if args.diagnose:
+                    counts = status.get("diagnostics", {})
+                    if not isinstance(counts, dict):
+                        raise ValueError
+                    safe_counts = {key: max(0, value) if type(value) is int else 0
+                                   for key in diagnostics.snapshot()
+                                   for value in (counts.get(key, 0),)}
+                    print(json.dumps(safe_counts, ensure_ascii=False, indent=2))
                 return 0 if status.get("connected") else 2
             except (httpx.HTTPError, ValueError, AttributeError):
                 print("qqbotai 尚未运行或本机状态不可读取。")

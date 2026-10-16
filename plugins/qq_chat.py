@@ -1,7 +1,9 @@
 from nonebot import logger, on_type
-from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageSegment
+from nonebot.adapters.onebot.v11 import Bot, Event, GroupMessageEvent, MessageSegment
+from nonebot.message import event_preprocessor
 
 from app.chat import ChatService
+from app.diagnostics import diagnostics
 from app.images import ImageService
 
 async def explicitly_mentioned(bot: Bot, event: GroupMessageEvent) -> bool:
@@ -25,6 +27,24 @@ def set_images(value: ImageService) -> None:
     images = value
 
 
+@event_preprocessor
+async def track_group_event(bot: Bot, event: Event) -> None:
+    if not isinstance(event, GroupMessageEvent):
+        return
+    diagnostics.increment("group_events")
+    if not await explicitly_mentioned(bot, event):
+        return
+    diagnostics.increment("mentioned_events")
+    if service is None:
+        return
+    if str(event.user_id) == str(bot.self_id):
+        diagnostics.increment("ignored_self")
+    elif str(event.group_id) not in service.settings.allowed_groups:
+        diagnostics.increment("ignored_group")
+    elif service.settings.napcat_self_id and str(bot.self_id) != service.settings.napcat_self_id:
+        diagnostics.increment("ignored_account")
+
+
 @chat.handle()
 async def handle_group_message(bot: Bot, event: GroupMessageEvent) -> None:
     if service is None or str(event.user_id) == str(bot.self_id):
@@ -37,6 +57,20 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent) -> None:
     if service.settings.napcat_self_id and str(bot.self_id) != service.settings.napcat_self_id:
         return
     key = (str(bot.self_id), group, event.get_user_id())
+    diagnostics.increment("handled")
+    send_failed = False
+
+    async def send_reply(answer: str) -> object:
+        nonlocal send_failed
+        try:
+            result = await bot.send(event, MessageSegment.text(answer))
+        except Exception:
+            send_failed = True
+            diagnostics.increment("reply_errors")
+            raise
+        diagnostics.increment("replies_sent")
+        return result
+
     try:
         text = event.get_plaintext().strip()
         picture_segments = [s for s in event.original_message if s.type == "image"]
@@ -47,10 +81,10 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent) -> None:
         # 图片消息默认识图；精确命令 /搜图 才会交给搜索服务。
         if picture_segments or command in ("/识图", "/搜图"):
             if len(picture_segments) != 1:
-                await bot.send(event, MessageSegment.text("请在同一条消息中 @我，并附带一张图片；可用 /识图 或 /搜图。"))
+                await send_reply("请在同一条消息中 @我，并附带一张图片；可用 /识图 或 /搜图。")
                 return
             if images is None:
-                await bot.send(event, MessageSegment.text("图片功能尚未初始化，请重启机器人。"))
+                await send_reply("图片功能尚未初始化，请重启机器人。")
                 return
             segment = picture_segments[0]
             mode = "search" if command == "/搜图" else "analyze"
@@ -61,9 +95,11 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent) -> None:
             key,
             str(event.message_id),
             text or "/识图",
-            lambda answer: bot.send(event, MessageSegment.text(answer)),
+            send_reply,
             operation=operation,
         )
     except Exception as error:
+        if not send_failed:
+            diagnostics.increment("reply_errors")
         # 不输出异常原文：其中可能包含请求数据或平台响应。
         logger.warning("QQ群回复失败，错误类型：{}", type(error).__name__)

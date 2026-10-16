@@ -1,9 +1,11 @@
 import argparse
 import json
 import secrets
+import tempfile
 from getpass import getpass
+from pathlib import Path
 
-from dotenv import dotenv_values
+from dotenv import dotenv_values, set_key
 
 from app.config import DEFAULT_BOT_NAME, DEEPSEEK_URLS, LLM_DEFAULTS, ROOT, Settings
 
@@ -17,6 +19,42 @@ def check_configuration() -> int:
         print("配置未就绪：请运行本机配置向导，检查连接凭证、允许的群及字段格式；配置值已隐藏。")
         return 2
     print("启动配置检查通过；配置值已隐藏，未连接 QQ 或外部服务。")
+    return 0
+
+
+def configure_groups() -> int:
+    """只修改群白名单，其他本机配置不重新收集或重建。"""
+    path = ROOT / ".env"
+    values = dotenv_values(path, encoding="utf-8", interpolate=False) if path.exists() else {}
+    print("仅修改允许的群。直接回车保留已有设置；尚未设置时须填写。群号不会回显。")
+    entered = getpass("允许的真实QQ群号（输入不显示字符，多个用英文逗号分隔）：").strip()
+    raw = entered or values.get("NAPCAT_ALLOWED_GROUPS") or ""
+    groups = [item.strip() for item in raw.split(",") if item.strip()]
+    try:
+        Settings(onebot_access_token="0123456789abcdef", allowed_groups=frozenset(groups)).validate_napcat()
+    except ValueError:
+        print("群设置无效：须填写至少一个由 ASCII 数字组成的真实群号；本次未修改配置，具体值已隐藏。")
+        return 2
+    if not entered:
+        print("已保留原有群设置；其他配置未修改，具体值已隐藏。")
+        return 0
+    original = path.read_bytes() if path.exists() else b""
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=ROOT, prefix=".env.groups-", suffix=".tmp", delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(original)
+        set_key(temporary, "NAPCAT_ALLOWED_GROUPS", ",".join(dict.fromkeys(groups)), encoding="utf-8")
+        # set_key 会规范换行；保留原文件常用的 LF / CRLF 格式。
+        newline = "\r\n" if b"\r\n" in original else "\n"
+        updated = temporary.read_text(encoding="utf-8")
+        with temporary.open("w", encoding="utf-8", newline="") as stream:
+            stream.write(updated.replace("\n", newline))
+        temporary.replace(path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    print("允许的群已保存；请重启 AI 程序使设置生效。其他配置保留，具体值已隐藏。")
     return 0
 
 
@@ -134,8 +172,12 @@ def configure() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="配置 qqbotai 的本机连接与模型服务")
-    parser.add_argument("--check", action="store_true", help="只读检查配置，不交互或连接外部服务")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--check", action="store_true", help="只读检查配置，不交互或连接外部服务")
+    mode.add_argument("--groups", action="store_true", help="仅修改允许的真实群号，不重填模型配置")
     args = parser.parse_args(argv)
+    if args.groups:
+        return configure_groups()
     return check_configuration() if args.check else configure()
 
 
